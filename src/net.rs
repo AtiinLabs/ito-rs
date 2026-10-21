@@ -76,7 +76,8 @@ impl Request {
         let req_bytes = postcard::to_allocvec(&self.req)?;
         let opt_bytes = postcard::to_allocvec(&self.opts)?;
         
-        // We use fetch_v2 unconditionally. Old hosts will trap, but that is intended for new plugins.
+        // fetch_v2 is always used. A host without it can't load the plugin at all (hosts check a
+        // plugin's imports before loading it), so this never fails mid-call.
         let len = unsafe { 
             host::fetch_v2(
                 req_bytes.as_ptr() as i32, req_bytes.len() as i32,
