@@ -109,6 +109,8 @@ pub trait NovelProvider {
 #[macro_export]
 macro_rules! export_manga_plugin {
     ($type:ty) => {
+        $crate::__export_abi_version!();
+
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
             let slice = unsafe { core::slice::from_raw_parts(url_ptr as *const u8, url_len as usize) };
@@ -390,6 +392,8 @@ macro_rules! export_manga_plugin {
 #[macro_export]
 macro_rules! export_novel_plugin {
     ($type:ty) => {
+        $crate::__export_abi_version!();
+
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
             let slice = unsafe { core::slice::from_raw_parts(url_ptr as *const u8, url_len as usize) };
@@ -648,6 +652,8 @@ macro_rules! export_novel_plugin {
 #[macro_export]
 macro_rules! export_anime_plugin {
     ($type:ty) => {
+        $crate::__export_abi_version!();
+
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
             let slice = unsafe { core::slice::from_raw_parts(url_ptr as *const u8, url_len as usize) };
