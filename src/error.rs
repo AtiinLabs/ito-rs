@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::cell::RefCell;
 use std::fmt;
 
@@ -57,16 +58,17 @@ impl From<std::string::FromUtf8Error> for Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// What kind of failure an error is, so the host can offer the right way out (open the plugin's
-/// settings, check the connection, try again). Hosts read it through `ito_last_error`; the order
-/// of the variants is the wire format.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+/// settings, check the connection, try again). Hosts read it through `ito_last_error`. Encoded
+/// like the other model enums, as an i32 discriminant; the values are the wire format.
+#[derive(Serialize_repr, Deserialize_repr, Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
 pub enum ErrorCategory {
-    NeedsSetup,
-    Unauthorized,
-    Network,
-    Server,
-    NotFound,
-    Other,
+    NeedsSetup = 0,
+    Unauthorized = 1,
+    Network = 2,
+    Server = 3,
+    NotFound = 4,
+    Other = 5,
 }
 
 /// A failure as hosts read it from `ito_last_error`.
@@ -176,10 +178,13 @@ mod tests {
     }
 
     #[test]
-    fn the_report_wire_format_is_the_category_index_then_the_message() {
+    fn the_report_wire_format_is_the_zigzag_category_then_the_message() {
         let bytes = postcard::to_allocvec(&Error::NeedsSetup("ab".into()).report()).unwrap_or_default();
         assert_eq!(bytes, vec![0, 2, b'a', b'b']);
+        // Postcard writes i32 as zigzag varints: 2 → 4, 5 → 10. Hosts decode it the same way.
+        let bytes = postcard::to_allocvec(&Error::Net("x".into()).report()).unwrap_or_default();
+        assert_eq!(bytes[0], 4);
         let bytes = postcard::to_allocvec(&Error::Unsupported.report()).unwrap_or_default();
-        assert_eq!(bytes[0], 5);
+        assert_eq!(bytes[0], 10);
     }
 }

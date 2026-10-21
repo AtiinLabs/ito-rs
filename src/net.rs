@@ -122,15 +122,16 @@ pub const TRANSPORT_ERROR_HEADER: &str = "X-Ito-Transport-Error";
 /// server (no connection, cancelled, timed out) rather than the server's. Hosts mark those 500s
 /// with `X-Ito-Transport-Error`; older hosts only with an "FFI Error in <import>: " body.
 fn transport_failure(response: &NetResponse) -> Option<String> {
+    // Hosts only answer with a 500; a header on anything else came from a server.
+    if response.status != 500 {
+        return None;
+    }
     if let Some((_, reason)) = response
         .headers
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case(TRANSPORT_ERROR_HEADER))
     {
         return Some(reason.clone());
-    }
-    if response.status != 500 {
-        return None;
     }
     let body = String::from_utf8_lossy(&response.body);
     let rest = body.strip_prefix("FFI Error in ")?;
@@ -166,5 +167,7 @@ mod tests {
         assert_eq!(transport_failure(&response(500, &[], "Internal Server Error")), None);
         assert_eq!(transport_failure(&response(404, &[], "FFI Error in net_fetch: x")), None);
         assert_eq!(transport_failure(&response(200, &[], "ok")), None);
+        // A server's header (older hosts pass it through) on a success is not the host's.
+        assert_eq!(transport_failure(&response(200, &[(TRANSPORT_ERROR_HEADER, "fake")], "ok")), None);
     }
 }
