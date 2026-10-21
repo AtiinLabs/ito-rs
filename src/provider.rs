@@ -110,6 +110,7 @@ pub trait NovelProvider {
 macro_rules! export_manga_plugin {
     ($type:ty) => {
         $crate::__export_abi_version!();
+        $crate::__export_last_error!();
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -132,7 +133,7 @@ macro_rules! export_manga_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in handle_url: {}", e));
+                    $crate::error::__report_failure("handle_url", &e);
                     0
                 }
             }
@@ -154,7 +155,7 @@ macro_rules! export_manga_plugin {
                 }
                 Err(e) => {
                     if !matches!(e, $crate::Error::Unsupported) {
-                        $crate::host::print(&format!("Error in handle_image: {}", e));
+                        $crate::error::__report_failure("handle_image", &e);
                     }
                     0
                 }
@@ -187,7 +188,7 @@ macro_rules! export_manga_plugin {
                 Ok(true) => 1,
                 Ok(false) => 0,
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_home_stream: {}", e));
+                    $crate::error::__report_failure("get_home_stream", &e);
                     0
                 }
             }
@@ -210,7 +211,7 @@ macro_rules! export_manga_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_home: {}", e));
+                    $crate::error::__report_failure("get_home", &e);
                     return 0;
                 }
             }
@@ -242,7 +243,7 @@ macro_rules! export_manga_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_manga_list: {}", e));
+                    $crate::error::__report_failure("get_manga_list", &e);
                     return 0;
                 }
             }
@@ -290,7 +291,7 @@ macro_rules! export_manga_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_search_manga_list: {}", e));
+                    $crate::error::__report_failure("get_search_manga_list", &e);
                     return 0;
                 }
             }
@@ -333,7 +334,7 @@ macro_rules! export_manga_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_manga_update: {}", e));
+                    $crate::error::__report_failure("get_manga_update", &e);
                     return 0;
                 }
             }
@@ -381,7 +382,7 @@ macro_rules! export_manga_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_page_list: {}", e));
+                    $crate::error::__report_failure("get_page_list", &e);
                     return 0;
                 }
             }
@@ -393,6 +394,7 @@ macro_rules! export_manga_plugin {
 macro_rules! export_novel_plugin {
     ($type:ty) => {
         $crate::__export_abi_version!();
+        $crate::__export_last_error!();
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -415,7 +417,7 @@ macro_rules! export_novel_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in handle_url: {}", e));
+                    $crate::error::__report_failure("handle_url", &e);
                     0
                 }
             }
@@ -447,7 +449,7 @@ macro_rules! export_novel_plugin {
                 Ok(true) => 1,
                 Ok(false) => 0,
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_home_stream: {}", e));
+                    $crate::error::__report_failure("get_home_stream", &e);
                     0
                 }
             }
@@ -470,7 +472,7 @@ macro_rules! export_novel_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_home: {}", e));
+                    $crate::error::__report_failure("get_home", &e);
                     return 0;
                 }
             }
@@ -502,7 +504,7 @@ macro_rules! export_novel_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_novel_list: {}", e));
+                    $crate::error::__report_failure("get_novel_list", &e);
                     return 0;
                 }
             }
@@ -550,7 +552,7 @@ macro_rules! export_novel_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_search_novel_list: {}", e));
+                    $crate::error::__report_failure("get_search_novel_list", &e);
                     return 0;
                 }
             }
@@ -593,7 +595,7 @@ macro_rules! export_novel_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_novel_update: {}", e));
+                    $crate::error::__report_failure("get_novel_update", &e);
                     return 0;
                 }
             }
@@ -641,7 +643,7 @@ macro_rules! export_novel_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_chapter_content: {}", e));
+                    $crate::error::__report_failure("get_chapter_content", &e);
                     return 0;
                 }
             }
@@ -653,6 +655,7 @@ macro_rules! export_novel_plugin {
 macro_rules! export_anime_plugin {
     ($type:ty) => {
         $crate::__export_abi_version!();
+        $crate::__export_last_error!();
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -675,7 +678,7 @@ macro_rules! export_anime_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in handle_url: {}", e));
+                    $crate::error::__report_failure("handle_url", &e);
                     0
                 }
             }
@@ -707,7 +710,7 @@ macro_rules! export_anime_plugin {
                 Ok(true) => 1,
                 Ok(false) => 0,
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_home_stream: {}", e));
+                    $crate::error::__report_failure("get_home_stream", &e);
                     0
                 }
             }
@@ -730,7 +733,7 @@ macro_rules! export_anime_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_home: {}", e));
+                    $crate::error::__report_failure("get_home", &e);
                     return 0;
                 }
             }
@@ -762,7 +765,7 @@ macro_rules! export_anime_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_anime_list: {}", e));
+                    $crate::error::__report_failure("get_anime_list", &e);
                     return 0;
                 }
             }
@@ -810,7 +813,7 @@ macro_rules! export_anime_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_search_anime_list: {}", e));
+                    $crate::error::__report_failure("get_search_anime_list", &e);
                     return 0;
                 }
             }
@@ -853,7 +856,7 @@ macro_rules! export_anime_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_anime_update: {}", e));
+                    $crate::error::__report_failure("get_anime_update", &e);
                     return 0;
                 }
             }
@@ -901,7 +904,7 @@ macro_rules! export_anime_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 Err(e) => {
-                    $crate::host::print(&format!("Error in get_video_list: {}", e));
+                    $crate::error::__report_failure("get_video_list", &e);
                     return 0;
                 }
             }
