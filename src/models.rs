@@ -114,6 +114,7 @@ pub enum SettingType {
     Toggle,
     Text,
     Picker,
+    Secret,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -138,9 +139,60 @@ pub enum Setting {
         options: Vec<String>,
         default_value: String,
     },
+    /// A credential such as an API key or password. The host keeps it out of plain
+    /// storage and backups, shows it as a masked field, and never displays the saved
+    /// value. Plugins read it with `defaults::get(id)`, which returns `None` until the
+    /// user enters one; writing it from the plugin is not supported.
+    Secret {
+        id: String,
+        name: String,
+        summary: Option<String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SettingsSchema {
     pub settings: Vec<Setting>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Hosts decode settings by postcard variant index, so existing variants must keep
+    // their indices and new ones are appended.
+    #[test]
+    fn setting_variants_keep_their_wire_indices() {
+        let schema = SettingsSchema {
+            settings: vec![
+                Setting::Toggle { id: "t".into(), name: "T".into(), summary: None, default_value: true },
+                Setting::Text { id: "x".into(), name: "X".into(), summary: None, default_value: String::new() },
+                Setting::Picker {
+                    id: "p".into(),
+                    name: "P".into(),
+                    summary: None,
+                    options: vec!["a".into()],
+                    default_value: "a".into(),
+                },
+                Setting::Secret { id: "s".into(), name: "S".into(), summary: Some("hint".into()) },
+            ],
+        };
+        let bytes = postcard::to_allocvec(&schema).unwrap();
+
+        // Vec length 4, then each setting starts with its variant index.
+        assert_eq!(bytes[0], 4);
+        assert_eq!(bytes[1], 0);
+        let secret_start = bytes.len() - postcard::to_allocvec(&schema.settings[3]).unwrap().len();
+        assert_eq!(bytes[secret_start], 3);
+
+        let decoded: SettingsSchema = postcard::from_bytes(&bytes).unwrap();
+        match &decoded.settings[3] {
+            Setting::Secret { id, name, summary } => {
+                assert_eq!(id, "s");
+                assert_eq!(name, "S");
+                assert_eq!(summary.as_deref(), Some("hint"));
+            }
+            other => panic!("expected secret, got {other:?}"),
+        }
+    }
 }
