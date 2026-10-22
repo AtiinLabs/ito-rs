@@ -69,6 +69,8 @@ pub enum ErrorCategory {
     Server = 3,
     NotFound = 4,
     Other = 5,
+    /// The provider explicitly does not participate in this optional operation.
+    Unsupported = 6,
 }
 
 /// A failure as hosts read it from `ito_last_error`.
@@ -78,6 +80,10 @@ pub struct ErrorReport {
     pub message: String,
 }
 
+/// Version 2 distinguishes Unsupported from a refusal whose message happens to say
+/// "Unsupported operation". Hosts before this export use the legacy message convention.
+pub const ERROR_PROTOCOL_VERSION: u32 = 2;
+
 impl Error {
     pub fn category(&self) -> ErrorCategory {
         match self {
@@ -86,7 +92,8 @@ impl Error {
             Error::Net(_) => ErrorCategory::Network,
             Error::Server(_) => ErrorCategory::Server,
             Error::NotFound(_) => ErrorCategory::NotFound,
-            Error::Html(_) | Error::Postcard(_) | Error::Utf8(_) | Error::Host(_) | Error::Unsupported => {
+            Error::Unsupported => ErrorCategory::Unsupported,
+            Error::Html(_) | Error::Postcard(_) | Error::Utf8(_) | Error::Host(_) => {
                 ErrorCategory::Other
             }
         }
@@ -145,7 +152,7 @@ pub fn __take_last_error() -> i64 {
     })
 }
 
-/// Exports `ito_last_error`. Used by the `export_*_plugin!` macros.
+/// Exports `ito_last_error` and its protocol version. Used by the `export_*_plugin!` macros.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __export_last_error {
@@ -153,6 +160,11 @@ macro_rules! __export_last_error {
         #[unsafe(no_mangle)]
         pub extern "C" fn ito_last_error() -> i64 {
             $crate::error::__take_last_error()
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn ito_error_version() -> u32 {
+            $crate::error::ERROR_PROTOCOL_VERSION
         }
     };
 }
@@ -170,7 +182,9 @@ mod tests {
             (Error::Server("HTTP 503".into()), ErrorCategory::Server, "HTTP 503"),
             (Error::NotFound("No such book".into()), ErrorCategory::NotFound, "No such book"),
             (Error::Host("Something else".into()), ErrorCategory::Other, "Something else"),
-            (Error::Unsupported, ErrorCategory::Other, "Unsupported operation"),
+            (Error::Host("Unsupported operation".into()), ErrorCategory::Other, "Unsupported operation"),
+            (Error::Unauthorized("Unsupported operation".into()), ErrorCategory::Unauthorized, "Unsupported operation"),
+            (Error::Unsupported, ErrorCategory::Unsupported, "Unsupported operation"),
         ];
         for (error, category, message) in cases {
             assert_eq!(error.report(), ErrorReport { category, message: message.into() });
@@ -184,7 +198,9 @@ mod tests {
         // Postcard writes i32 as zigzag varints: 2 → 4, 5 → 10. Hosts decode it the same way.
         let bytes = postcard::to_allocvec(&Error::Net("x".into()).report()).unwrap_or_default();
         assert_eq!(bytes[0], 4);
-        let bytes = postcard::to_allocvec(&Error::Unsupported.report()).unwrap_or_default();
+        let bytes = postcard::to_allocvec(&Error::Host("x".into()).report()).unwrap_or_default();
         assert_eq!(bytes[0], 10);
+        let bytes = postcard::to_allocvec(&Error::Unsupported.report()).unwrap_or_default();
+        assert_eq!(bytes[0], 12);
     }
 }
