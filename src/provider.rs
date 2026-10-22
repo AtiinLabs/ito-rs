@@ -40,6 +40,20 @@ pub trait MangaProvider {
     fn handle_image(_url: &str) -> Result<Vec<u8>> {
         Err(crate::Error::Unsupported)
     }
+
+    /// Origins this plugin currently permits for native image fetching, derived from its
+    /// configuration, not from a supplied image URL. Return absolute HTTP(S) origins; the host
+    /// compares scheme, host and effective port and rejects cross-origin redirects.
+    fn get_image_origins() -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    /// Resolves a plugin-owned image locator into a native request without downloading bytes.
+    /// Return Unsupported for images requiring legacy `handle_image` processing. Any other
+    /// failure is a refusal: the host must not fall back to another fetch path.
+    fn get_image_request(_url: &str) -> Result<crate::models::PluginImageRequest> {
+        Err(crate::Error::Unsupported)
+    }
 }
 
 pub trait AnimeProvider {
@@ -70,6 +84,16 @@ pub trait AnimeProvider {
     fn get_video_list(anime: Anime, episode: Episode) -> Result<Vec<Video>>;
 
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
+        Err(crate::Error::Unsupported)
+    }
+
+    /// Configured image origins, independent of image input. See MangaProvider::get_image_origins.
+    fn get_image_origins() -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    /// Resolves a native image request. See MangaProvider::get_image_request.
+    fn get_image_request(_url: &str) -> Result<crate::models::PluginImageRequest> {
         Err(crate::Error::Unsupported)
     }
 }
@@ -104,6 +128,16 @@ pub trait NovelProvider {
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
         Err(crate::Error::Unsupported)
     }
+
+    /// Configured image origins, independent of image input. See MangaProvider::get_image_origins.
+    fn get_image_origins() -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
+    /// Resolves a native image request. See MangaProvider::get_image_request.
+    fn get_image_request(_url: &str) -> Result<crate::models::PluginImageRequest> {
+        Err(crate::Error::Unsupported)
+    }
 }
 
 #[macro_export]
@@ -111,6 +145,7 @@ macro_rules! export_manga_plugin {
     ($type:ty) => {
         $crate::__export_abi_version!();
         $crate::__export_last_error!();
+        $crate::__export_image_requests!($type, $crate::provider::MangaProvider);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -395,6 +430,7 @@ macro_rules! export_novel_plugin {
     ($type:ty) => {
         $crate::__export_abi_version!();
         $crate::__export_last_error!();
+        $crate::__export_image_requests!($type, $crate::provider::NovelProvider);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -656,6 +692,7 @@ macro_rules! export_anime_plugin {
     ($type:ty) => {
         $crate::__export_abi_version!();
         $crate::__export_last_error!();
+        $crate::__export_image_requests!($type, $crate::provider::AnimeProvider);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
