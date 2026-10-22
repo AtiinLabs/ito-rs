@@ -4,6 +4,8 @@ pub mod error;
 pub mod ffi_alloc;
 pub mod host;
 pub mod html;
+#[doc(hidden)]
+pub mod image;
 pub mod models;
 pub mod net;
 pub mod provider;

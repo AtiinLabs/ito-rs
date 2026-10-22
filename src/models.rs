@@ -20,6 +20,18 @@ pub struct Page {
     pub headers: Option<std::collections::HashMap<String, String>>,
 }
 
+/// An image the host can fetch without holding the plugin's execution lane.
+///
+/// `url` is an absolute HTTP(S) URL. The host only fetches it when its origin matches one
+/// returned by the provider's inputless `get_image_origins`. Headers are private request
+/// material, never part of the persisted image locator or logs. Cross-origin redirects are
+/// refused, so servers must expose the image at the declared origin.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct PluginImageRequest {
+    pub url: String,
+    pub headers: Option<std::collections::HashMap<String, String>>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Listing {
     pub id: String,
