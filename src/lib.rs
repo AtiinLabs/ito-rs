@@ -1,3 +1,5 @@
+#[doc(hidden)]
+pub mod completion;
 pub mod defaults;
 pub mod env;
 pub mod error;

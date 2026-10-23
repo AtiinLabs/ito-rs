@@ -33,6 +33,12 @@ pub trait MangaProvider {
 
     fn get_page_list(manga: Manga, chapter: Chapter) -> Result<Vec<Page>>;
 
+    /// Reports completion of a chapter. Delivery may be retried: implementations must be
+    /// idempotent and must not lower remote progress. Unsupported opts out.
+    fn mark_chapter_read(_media_key: &str, _chapter_key: &str) -> Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
         Err(crate::Error::Unsupported)
     }
@@ -83,6 +89,12 @@ pub trait AnimeProvider {
 
     fn get_video_list(anime: Anime, episode: Episode) -> Result<Vec<Video>>;
 
+    /// Reports completion of an episode. Delivery may be retried: implementations must be
+    /// idempotent and must not lower remote progress. Unsupported opts out.
+    fn mark_episode_watched(_media_key: &str, _episode_key: &str) -> Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
         Err(crate::Error::Unsupported)
     }
@@ -125,6 +137,11 @@ pub trait NovelProvider {
 
     fn get_chapter_content(novel: Novel, chapter: novel::Chapter) -> Result<Vec<Page>>;
 
+    /// Reports completion of a chapter. See MangaProvider::mark_chapter_read.
+    fn mark_chapter_read(_media_key: &str, _chapter_key: &str) -> Result<()> {
+        Err(crate::Error::Unsupported)
+    }
+
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
         Err(crate::Error::Unsupported)
     }
@@ -146,6 +163,7 @@ macro_rules! export_manga_plugin {
         $crate::__export_abi_version!();
         $crate::__export_last_error!();
         $crate::__export_image_requests!($type, $crate::provider::MangaProvider);
+        $crate::__export_completion!($type, $crate::provider::MangaProvider, mark_chapter_read);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -431,6 +449,7 @@ macro_rules! export_novel_plugin {
         $crate::__export_abi_version!();
         $crate::__export_last_error!();
         $crate::__export_image_requests!($type, $crate::provider::NovelProvider);
+        $crate::__export_completion!($type, $crate::provider::NovelProvider, mark_chapter_read);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -693,6 +712,7 @@ macro_rules! export_anime_plugin {
         $crate::__export_abi_version!();
         $crate::__export_last_error!();
         $crate::__export_image_requests!($type, $crate::provider::AnimeProvider);
+        $crate::__export_completion!($type, $crate::provider::AnimeProvider, mark_episode_watched);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
