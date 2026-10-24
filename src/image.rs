@@ -35,12 +35,7 @@ macro_rules! __export_image_requests {
 
         #[unsafe(no_mangle)]
         pub extern "C" fn get_image_request(url_ptr: i32, url_len: i32) -> i64 {
-            let bytes = if url_ptr == 0 || url_len <= 0 {
-                &[]
-            } else {
-                unsafe { core::slice::from_raw_parts(url_ptr as *const u8, url_len as usize) }
-            };
-            let url = String::from_utf8_lossy(bytes);
+            let url = $crate::export::__text(unsafe { $crate::export::__bytes(url_ptr, url_len) });
             $crate::image::__pack_result(
                 "get_image_request",
                 <$type as $provider>::get_image_request(url.as_ref()),

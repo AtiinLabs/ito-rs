@@ -24,12 +24,7 @@ macro_rules! __export_settings_actions {
 
         #[unsafe(no_mangle)]
         pub extern "C" fn run_settings_action(id_ptr: i32, id_len: i32) -> i64 {
-            let bytes = if id_ptr == 0 || id_len <= 0 {
-                &[]
-            } else {
-                unsafe { core::slice::from_raw_parts(id_ptr as *const u8, id_len as usize) }
-            };
-            let id = String::from_utf8_lossy(bytes);
+            let id = $crate::export::__text(unsafe { $crate::export::__bytes(id_ptr, id_len) });
             $crate::image::__pack_result(
                 "run_settings_action",
                 <$type as $provider>::run_settings_action(id.as_ref()),

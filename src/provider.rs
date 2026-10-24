@@ -594,12 +594,7 @@ macro_rules! export_plugin {
         #[unsafe(no_mangle)]
         pub extern "C" fn get_listing(listing_ptr: i32, listing_len: i32, page: i32) -> i64 {
             let listing = unsafe { $crate::export::__bytes(listing_ptr, listing_len) };
-            $crate::image::__pack_result(
-                "get_listing",
-                $crate::export::__decode(listing).and_then(|listing| {
-                    <$type as $crate::provider::SourceProvider>::get_listing(listing, page)
-                }),
-            )
+            $crate::image::__pack_result("get_listing", $crate::export::__listing::<$type>(listing, page))
         }
 
         #[unsafe(no_mangle)]
@@ -611,25 +606,9 @@ macro_rules! export_plugin {
             filters_ptr: i32,
             filters_len: i32,
         ) -> i64 {
-            let query =
-                $crate::export::__text(unsafe { $crate::export::__bytes(query_ptr, query_len) });
+            let query = unsafe { $crate::export::__bytes(query_ptr, query_len) };
             let filters = unsafe { $crate::export::__bytes(filters_ptr, filters_len) };
-            $crate::image::__pack_result(
-                "search",
-                $crate::export::__search_kind(kind).and_then(|kind| {
-                    let filters = if filters.is_empty() {
-                        Vec::new()
-                    } else {
-                        $crate::export::__decode(filters)?
-                    };
-                    <$type as $crate::provider::SourceProvider>::search(
-                        query.as_ref(),
-                        page,
-                        kind,
-                        filters,
-                    )
-                }),
-            )
+            $crate::image::__pack_result("search", $crate::export::__search::<$type>(query, page, kind, filters))
         }
 
         #[unsafe(no_mangle)]
@@ -642,13 +621,7 @@ macro_rules! export_plugin {
             let entry = unsafe { $crate::export::__bytes(entry_ptr, entry_len) };
             $crate::image::__pack_result(
                 "get_media_update",
-                $crate::export::__decode(entry).and_then(|entry| {
-                    <$type as $crate::provider::SourceProvider>::get_media_update(
-                        entry,
-                        needs_details != 0,
-                        needs_units != 0,
-                    )
-                }),
+                $crate::export::__media_update::<$type>(entry, needs_details, needs_units),
             )
         }
 
@@ -661,13 +634,7 @@ macro_rules! export_plugin {
         ) -> i64 {
             let entry = unsafe { $crate::export::__bytes(entry_ptr, entry_len) };
             let chapter = unsafe { $crate::export::__bytes(chapter_ptr, chapter_len) };
-            $crate::image::__pack_result(
-                "get_chapter_pages",
-                $crate::export::__decode(entry).and_then(|entry| {
-                    let chapter = $crate::export::__decode(chapter)?;
-                    <$type as $crate::provider::SourceProvider>::get_chapter_pages(entry, chapter)
-                }),
-            )
+            $crate::image::__pack_result("get_chapter_pages", $crate::export::__chapter_pages::<$type>(entry, chapter))
         }
 
         #[unsafe(no_mangle)]
@@ -681,10 +648,7 @@ macro_rules! export_plugin {
             let episode = unsafe { $crate::export::__bytes(episode_ptr, episode_len) };
             $crate::image::__pack_result(
                 "get_episode_videos",
-                $crate::export::__decode(anime).and_then(|anime| {
-                    let episode = $crate::export::__decode(episode)?;
-                    <$type as $crate::provider::SourceProvider>::get_episode_videos(anime, episode)
-                }),
+                $crate::export::__episode_videos::<$type>(anime, episode),
             )
         }
 
@@ -696,20 +660,11 @@ macro_rules! export_plugin {
             unit_key_ptr: i32,
             unit_key_len: i32,
         ) -> i32 {
-            let media_key = $crate::export::__text(unsafe {
-                $crate::export::__bytes(media_key_ptr, media_key_len)
-            });
-            let unit_key =
-                $crate::export::__text(unsafe { $crate::export::__bytes(unit_key_ptr, unit_key_len) });
+            let media_key = unsafe { $crate::export::__bytes(media_key_ptr, media_key_len) };
+            let unit_key = unsafe { $crate::export::__bytes(unit_key_ptr, unit_key_len) };
             $crate::completion::__ack_result(
                 "mark_completed",
-                $crate::export::__media_kind(kind).and_then(|kind| {
-                    <$type as $crate::provider::SourceProvider>::mark_completed(
-                        kind,
-                        media_key.as_ref(),
-                        unit_key.as_ref(),
-                    )
-                }),
+                $crate::export::__mark_completed::<$type>(kind, media_key, unit_key),
             )
         }
     };
@@ -857,5 +812,125 @@ mod tests {
             Err(Error::Unsupported)
         ));
         assert!(calls().is_empty());
+    }
+
+    struct Shows;
+
+    impl AnimeProvider for Shows {
+        fn get_anime_list(_listing: Listing, _page: i32) -> Result<anime::PageResult> {
+            Ok(anime::PageResult { entries: Vec::new(), has_next_page: false })
+        }
+
+        fn get_search_anime_list(query: &str, _page: i32, _filters: Vec<FilterItem>) -> Result<anime::PageResult> {
+            record(format!("search {query}"));
+            Ok(anime::PageResult { entries: Vec::new(), has_next_page: false })
+        }
+
+        fn get_anime_update(anime: Anime, _needs_details: bool, _needs_episodes: bool) -> Result<Anime> {
+            Ok(anime)
+        }
+
+        fn get_video_list(anime: Anime, episode: Episode) -> Result<Vec<Video>> {
+            record(format!("videos {} {}", anime.key, episode.key));
+            Ok(Vec::new())
+        }
+
+        fn mark_episode_watched(media_key: &str, episode_key: &str) -> Result<()> {
+            record(format!("watched {media_key} {episode_key}"));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_anime_source_routes_episodes_and_its_own_completions() {
+        type Source = AnimeSource<Shows>;
+        assert_eq!(MediaKind::mask(Source::KINDS), 0b010);
+        Source::search("q", 1, Some(MediaKind::Manga), Vec::new()).unwrap();
+        Source::search("q", 1, Some(MediaKind::Anime), Vec::new()).unwrap();
+        let anime = Anime {
+            key: "a".into(),
+            title: "A".into(),
+            studios: None,
+            description: None,
+            tags: None,
+            cover: None,
+            url: None,
+            status: anime::Status::Unknown,
+            content_rating: anime::ContentRating::Safe,
+            nsfw: 0,
+            episodes: None,
+            seasons: None,
+        };
+        let episode = Episode {
+            key: "e".into(),
+            title: None,
+            episode: None,
+            date_updated: None,
+            url: None,
+            lang: None,
+            paywalled: None,
+        };
+        Source::get_episode_videos(anime.clone(), episode).unwrap();
+        assert!(matches!(
+            Source::get_chapter_pages(MediaEntry::Anime(anime), chapter(ContentKind::Images)),
+            Err(Error::Unsupported)
+        ));
+        Source::mark_completed(MediaKind::Anime, "a", "e").unwrap();
+        assert!(matches!(Source::mark_completed(MediaKind::Manga, "a", "e"), Err(Error::Unsupported)));
+        assert_eq!(calls(), ["search q", "videos a e", "watched a e"]);
+    }
+
+    struct Library;
+
+    impl NovelProvider for Library {
+        fn get_novel_list(_listing: Listing, _page: i32) -> Result<novel::PageResult> {
+            Ok(novel::PageResult { entries: Vec::new(), has_next_page: false })
+        }
+
+        fn get_search_novel_list(_query: &str, _page: i32, _filters: Vec<FilterItem>) -> Result<novel::PageResult> {
+            Ok(novel::PageResult { entries: Vec::new(), has_next_page: false })
+        }
+
+        fn get_novel_update(novel: Novel, _needs_details: bool, _needs_chapters: bool) -> Result<Novel> {
+            Ok(novel)
+        }
+
+        fn get_chapter_content(novel: Novel, chapter: Chapter) -> Result<Vec<Page>> {
+            record(format!("content {} {} {:?}", novel.key, chapter.key, chapter.kind));
+            Ok(Vec::new())
+        }
+
+        fn mark_chapter_read(media_key: &str, chapter_key: &str) -> Result<()> {
+            record(format!("read {media_key} {chapter_key}"));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_novel_source_reads_its_chapters_and_completions() {
+        type Source = NovelSource<Library>;
+        assert_eq!(MediaKind::mask(Source::KINDS), 0b100);
+        let novel = Novel {
+            key: "n".into(),
+            title: "N".into(),
+            authors: None,
+            artist: None,
+            description: None,
+            tags: None,
+            cover: None,
+            url: None,
+            status: novel::Status::Unknown,
+            content_rating: novel::ContentRating::Safe,
+            nsfw: 0,
+            chapters: None,
+        };
+        Source::get_chapter_pages(MediaEntry::Novel(novel), chapter(ContentKind::Text)).unwrap();
+        assert!(matches!(
+            Source::get_chapter_pages(MediaEntry::Manga(manga("s")), chapter(ContentKind::Text)),
+            Err(Error::Unsupported)
+        ));
+        Source::mark_completed(MediaKind::Novel, "n", "c1").unwrap();
+        assert!(matches!(Source::mark_completed(MediaKind::Manga, "n", "c1"), Err(Error::Unsupported)));
+        assert_eq!(calls(), ["content n c1 Text", "read n c1"]);
     }
 }
