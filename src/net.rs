@@ -19,6 +19,9 @@ pub struct NetResponse {
     pub body: Vec<u8>,
 }
 
+/// Options sent alongside every request. Both fields are reserved: hosts don't act on them, and
+/// the SDK always sends the defaults. They stay on the wire so plugins and hosts built before
+/// they were retired keep decoding each other's requests.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct NetOptions {
     pub rate_limit: i32,
@@ -59,16 +62,6 @@ impl Request {
 
     pub fn body(&mut self, body: &[u8]) -> &mut Self {
         self.req.body = Some(body.to_vec());
-        self
-    }
-    
-    pub fn rate_limit(&mut self, rate_limit: i32) -> &mut Self {
-        self.opts.rate_limit = rate_limit;
-        self
-    }
-
-    pub fn persist_cookies(&mut self, persist: bool) -> &mut Self {
-        self.opts.persist_cookies = persist;
         self
     }
 
