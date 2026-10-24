@@ -38,9 +38,15 @@ unsafe extern "C" {
     pub fn webview_read_result(ptr: i32);
 }
 
+/// Prints to the host's log. Off wasm (the SDK's own tests) there is no host, so nothing is printed.
 pub fn print(msg: &str) {
-    let msg_bytes = msg.as_bytes();
-    unsafe {
-        sys_print(msg_bytes.as_ptr() as i32, msg_bytes.len() as i32);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let msg_bytes = msg.as_bytes();
+        unsafe {
+            sys_print(msg_bytes.as_ptr() as i32, msg_bytes.len() as i32);
+        }
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = msg;
 }

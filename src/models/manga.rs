@@ -29,18 +29,7 @@ pub enum Viewer {
     Webtoon = 4,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Chapter {
-    pub key: String,
-    pub title: Option<String>,
-    pub volume: Option<f32>,
-    pub chapter: Option<f32>,
-    pub date_updated: Option<f64>,
-    pub scanlator: Option<String>,
-    pub url: Option<String>,
-    pub lang: Option<String>,
-    pub paywalled: Option<bool>,
-}
+pub use super::Chapter;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Manga {

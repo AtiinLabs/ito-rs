@@ -3,6 +3,8 @@ pub mod completion;
 pub mod defaults;
 pub mod env;
 pub mod error;
+#[doc(hidden)]
+pub mod export;
 pub mod ffi_alloc;
 pub mod host;
 pub mod html;
@@ -23,7 +25,10 @@ pub use postcard;
 /// as `ito_abi_version` and hosts refuse plugins built for a version they don't support. Bump it
 /// when a host must understand something new to run plugins built with this SDK; a new host
 /// function needs no bump, since hosts check a plugin's imports before loading it.
-pub const ABI_VERSION: u32 = 1;
+///
+/// Version 2: entries carry a `MediaKind` and chapters a `ContentKind`; plugins export
+/// `ito_supported_kinds` and one kind-neutral set of exports (see `provider`).
+pub const ABI_VERSION: u32 = 2;
 
 /// Exports `ito_abi_version`. Used by the `export_*_plugin!` macros.
 #[doc(hidden)]

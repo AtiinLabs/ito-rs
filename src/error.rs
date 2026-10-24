@@ -137,19 +137,27 @@ thread_local! {
 
 /// Reports `error` as the failure of `export`: kept for the host's `ito_last_error` call, and
 /// printed as "Error in <export>: <error>" for hosts that read failures from the plugin's output.
+/// Unsupported is an opt-out, not a failure, so it is kept but not printed.
 /// Used by the `export_*_plugin!` macros.
 #[doc(hidden)]
 pub fn __report_failure(export: &str, error: &Error) {
     let report = postcard::to_allocvec(&error.report()).ok();
     LAST_ERROR.with(|last| *last.borrow_mut() = report);
-    crate::host::print(&format!("Error in {}: {}", export, error));
+    if !matches!(error, Error::Unsupported) {
+        crate::host::print(&format!("Error in {}: {}", export, error));
+    }
+}
+
+/// The last report, encoded, once.
+pub(crate) fn take_last_report() -> Option<Vec<u8>> {
+    LAST_ERROR.with(|last| last.borrow_mut().take())
 }
 
 /// Hands the last report to the host once, packed as `(pointer << 32) | length`, or 0 when there
 /// is none. The host frees it with `dealloc`, like any export result.
 #[doc(hidden)]
 pub fn __take_last_error() -> i64 {
-    LAST_ERROR.with(|last| match last.borrow_mut().take() {
+    match take_last_report() {
         Some(bytes) => {
             let bytes = bytes.into_boxed_slice();
             let ptr = bytes.as_ptr() as u64;
@@ -158,7 +166,7 @@ pub fn __take_last_error() -> i64 {
             ((ptr << 32) | len) as i64
         }
         None => 0,
-    })
+    }
 }
 
 /// Exports `ito_last_error` and its protocol version. Used by the `export_*_plugin!` macros.
