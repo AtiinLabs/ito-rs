@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WebviewRequest {
     pub url: String,
+    /// Reserved; hosts ignore it. Always None.
     pub script: Option<String>,
 }
 
@@ -41,12 +42,18 @@ impl Webview {
         postcard::from_bytes(&response_buf).map_err(Error::Postcard)
     }
 
+    /// Runs `script` in the page last loaded by `load_url` and returns its result as text. A
+    /// script that evaluates to nothing (`undefined` or `""`) returns an empty string; a
+    /// cancelled call or a host without a web view is an error.
     pub fn execute_js(script: &str) -> Result<String> {
         let bytes = script.as_bytes();
         let len = unsafe { host::webview_execute_js(bytes.as_ptr() as i32, bytes.len() as i32) };
-        if len <= 0 {
-            host::print("webview_execute_js FFI returned len <= 0");
+        if len < 0 {
+            host::print("webview_execute_js FFI returned no result");
             return Err(Error::Unsupported);
+        }
+        if len == 0 {
+            return Ok(String::new());
         }
         
         let mut response_buf = Vec::<u8>::with_capacity(len as usize);
