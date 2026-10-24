@@ -28,6 +28,7 @@ unsafe extern "C" {
     pub fn set(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32);
     pub fn get(key_ptr: i32, key_len: i32) -> i64;
     pub fn remove(key_ptr: i32, key_len: i32);
+    pub fn set_secret(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32);
 }
 
 #[link(wasm_import_module = "ito:core/webview")]
