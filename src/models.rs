@@ -36,6 +36,7 @@ pub struct PluginImageRequest {
 pub struct Listing {
     pub id: String,
     pub name: String,
+    /// Reserved; hosts pass it back unchanged. Set 0.
     pub kind: i32,
 }
 
@@ -48,6 +49,7 @@ pub enum FilterValue {
     String(String),
 }
 
+/// A search filter value. Reserved: hosts currently always send an empty filter list.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FilterItem {
     pub type_name: String, // swift `type`
@@ -118,15 +120,6 @@ pub struct HomeComponent {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HomeLayout {
     pub components: Vec<HomeComponent>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[non_exhaustive]
-pub enum SettingType {
-    Toggle,
-    Text,
-    Picker,
-    Secret,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
