@@ -11,7 +11,6 @@ pub mod image;
 pub mod models;
 pub mod net;
 pub mod provider;
-pub mod ui;
 #[doc(hidden)]
 pub mod settings_action;
 pub mod webview;

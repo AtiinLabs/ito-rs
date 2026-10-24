@@ -17,11 +17,6 @@ unsafe extern "C" {
     pub fn own_text(id: i32) -> i64;
 }
 
-#[link(wasm_import_module = "ito:core/js")]
-unsafe extern "C" {
-    pub fn evaluate(script_ptr: i32, script_len: i32) -> i64;
-}
-
 #[link(wasm_import_module = "ito:core/std")]
 unsafe extern "C" {
     #[link_name = "print"]
@@ -33,11 +28,6 @@ unsafe extern "C" {
     pub fn set(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32);
     pub fn get(key_ptr: i32, key_len: i32) -> i64;
     pub fn remove(key_ptr: i32, key_len: i32);
-}
-
-#[link(wasm_import_module = "ito:core/ui")]
-unsafe extern "C" {
-    pub fn push_home_component(ptr: i32, len: i32);
 }
 
 #[link(wasm_import_module = "ito:core/webview")]

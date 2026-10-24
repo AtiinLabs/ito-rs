@@ -35,12 +35,9 @@ pub trait MangaProvider {
         Err(crate::Error::Unsupported)
     }
 
-    fn get_home_stream() -> Result<bool> {
-        Ok(false)
-    }
-
     fn get_manga_list(listing: Listing, page: i32) -> Result<manga::PageResult>;
 
+    /// `filters` is reserved: hosts send an empty list until plugins can declare filters.
     fn get_search_manga_list(
         query: &str,
         page: i32,
@@ -57,6 +54,9 @@ pub trait MangaProvider {
         Err(crate::Error::Unsupported)
     }
 
+    /// Maps a web address on this plugin's site (the manifest `url` host or a subdomain) to
+    /// the title it shows. Ito offers links pasted into Search; it opens `Manga`, `Anime` and
+    /// `Novel` values, loading details from the returned key. Unsupported opts out.
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
         Err(crate::Error::Unsupported)
     }
@@ -106,10 +106,6 @@ pub trait AnimeProvider {
         Err(crate::Error::Unsupported)
     }
 
-    fn get_home_stream() -> Result<bool> {
-        Ok(false)
-    }
-
     fn get_anime_list(listing: Listing, page: i32) -> Result<anime::PageResult>;
 
     fn get_search_anime_list(
@@ -128,6 +124,7 @@ pub trait AnimeProvider {
         Err(crate::Error::Unsupported)
     }
 
+    /// Maps a web address on this plugin's site to a title. See MangaProvider::handle_url.
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
         Err(crate::Error::Unsupported)
     }
@@ -169,10 +166,6 @@ pub trait NovelProvider {
         Err(crate::Error::Unsupported)
     }
 
-    fn get_home_stream() -> Result<bool> {
-        Ok(false)
-    }
-
     fn get_novel_list(listing: Listing, page: i32) -> Result<novel::PageResult>;
 
     fn get_search_novel_list(
@@ -190,6 +183,7 @@ pub trait NovelProvider {
         Err(crate::Error::Unsupported)
     }
 
+    /// Maps a web address on this plugin's site to a title. See MangaProvider::handle_url.
     fn handle_url(_url: &str) -> Result<crate::models::LinkValue> {
         Err(crate::Error::Unsupported)
     }
@@ -281,18 +275,6 @@ macro_rules! export_manga_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 None => 0
-            }
-        }
-
-        #[unsafe(no_mangle)]
-        pub extern "C" fn get_home_stream() -> i32 {
-            match <$type as $crate::provider::MangaProvider>::get_home_stream() {
-                Ok(true) => 1,
-                Ok(false) => 0,
-                Err(e) => {
-                    $crate::error::__report_failure("get_home_stream", &e);
-                    0
-                }
             }
         }
 
@@ -549,18 +531,6 @@ macro_rules! export_novel_plugin {
         }
 
         #[unsafe(no_mangle)]
-        pub extern "C" fn get_home_stream() -> i32 {
-            match <$type as $crate::provider::NovelProvider>::get_home_stream() {
-                Ok(true) => 1,
-                Ok(false) => 0,
-                Err(e) => {
-                    $crate::error::__report_failure("get_home_stream", &e);
-                    0
-                }
-            }
-        }
-
-        #[unsafe(no_mangle)]
         pub extern "C" fn get_home() -> i64 {
             match <$type as $crate::provider::NovelProvider>::get_home() {
                 Ok(res) => {
@@ -809,18 +779,6 @@ macro_rules! export_anime_plugin {
                     ((ptr << 32) | len) as i64
                 }
                 None => 0
-            }
-        }
-
-        #[unsafe(no_mangle)]
-        pub extern "C" fn get_home_stream() -> i32 {
-            match <$type as $crate::provider::AnimeProvider>::get_home_stream() {
-                Ok(true) => 1,
-                Ok(false) => 0,
-                Err(e) => {
-                    $crate::error::__report_failure("get_home_stream", &e);
-                    0
-                }
             }
         }
 
