@@ -43,7 +43,7 @@ impl Webview {
     }
 
     /// Runs `script` in the page last loaded by `load_url` and returns its result as text. A
-    /// script that evaluates to nothing (`undefined`, `null`, `""`) returns an empty string; a
+    /// script that evaluates to nothing (`undefined` or `""`) returns an empty string; a
     /// cancelled call or a host without a web view is an error.
     pub fn execute_js(script: &str) -> Result<String> {
         let bytes = script.as_bytes();
