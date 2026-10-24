@@ -167,9 +167,47 @@ pub struct SettingsSchema {
     pub settings: Vec<Setting>,
 }
 
+/// A non-destructive diagnostic offered by a plugin's settings screen.
+/// Kept separate from SettingsSchema so older hosts can still decode that schema.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct SettingsAction {
+    pub id: String,
+    pub title: String,
+    pub summary: Option<String>,
+}
+
+/// An advisory settings problem. `key` is a Setting id, or empty for a form-level issue.
+/// Messages must not include credentials, URLs, or other setting values.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct SettingIssue {
+    pub key: String,
+    pub message: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_payloads_follow_the_separate_host_wire_contract() {
+        let actions = vec![SettingsAction {
+            id: "probe".into(),
+            title: "Test".into(),
+            summary: Some("Hi".into()),
+        }];
+        assert_eq!(
+            postcard::to_allocvec(&actions).unwrap(),
+            b"\x01\x05probe\x04Test\x01\x02Hi"
+        );
+        let issues = vec![
+            SettingIssue { key: "url".into(), message: "Missing".into() },
+            SettingIssue { key: String::new(), message: "Setup".into() },
+        ];
+        assert_eq!(
+            postcard::to_allocvec(&issues).unwrap(),
+            b"\x02\x03url\x07Missing\x00\x05Setup"
+        );
+    }
 
     // Hosts decode settings by postcard variant index, so existing variants must keep
     // their indices and new ones are appended.

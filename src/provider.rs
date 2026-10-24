@@ -17,6 +17,24 @@ pub trait MangaProvider {
         None
     }
 
+    /// Non-destructive settings diagnostics. Older hosts ignore these optional exports.
+    fn get_settings_actions() -> Result<Vec<crate::models::SettingsAction>> {
+        Ok(Vec::new())
+    }
+
+    /// Runs against the host's temporary settings snapshot, which may include unsaved values.
+    /// May read the network, but must not change remote state or require an interactive login.
+    /// Local writes are temporary. Return a user-facing sentence without setting values.
+    fn run_settings_action(_action_id: &str) -> Result<String> {
+        Err(crate::Error::Unsupported)
+    }
+
+    /// Advisory, local-only validation: read settings without network requests or writes.
+    /// An empty list means valid; Unsupported means validation is not implemented.
+    fn validate_settings() -> Result<Vec<crate::models::SettingIssue>> {
+        Err(crate::Error::Unsupported)
+    }
+
     fn get_home_stream() -> Result<bool> {
         Ok(false)
     }
@@ -73,6 +91,21 @@ pub trait AnimeProvider {
         None
     }
 
+    /// Non-destructive settings diagnostics. See MangaProvider::get_settings_actions.
+    fn get_settings_actions() -> Result<Vec<crate::models::SettingsAction>> {
+        Ok(Vec::new())
+    }
+
+    /// Runs a temporary settings diagnostic. See MangaProvider::run_settings_action.
+    fn run_settings_action(_action_id: &str) -> Result<String> {
+        Err(crate::Error::Unsupported)
+    }
+
+    /// Advisory, local-only validation. See MangaProvider::validate_settings.
+    fn validate_settings() -> Result<Vec<crate::models::SettingIssue>> {
+        Err(crate::Error::Unsupported)
+    }
+
     fn get_home_stream() -> Result<bool> {
         Ok(false)
     }
@@ -121,6 +154,21 @@ pub trait NovelProvider {
         None
     }
 
+    /// Non-destructive settings diagnostics. See MangaProvider::get_settings_actions.
+    fn get_settings_actions() -> Result<Vec<crate::models::SettingsAction>> {
+        Ok(Vec::new())
+    }
+
+    /// Runs a temporary settings diagnostic. See MangaProvider::run_settings_action.
+    fn run_settings_action(_action_id: &str) -> Result<String> {
+        Err(crate::Error::Unsupported)
+    }
+
+    /// Advisory, local-only validation. See MangaProvider::validate_settings.
+    fn validate_settings() -> Result<Vec<crate::models::SettingIssue>> {
+        Err(crate::Error::Unsupported)
+    }
+
     fn get_home_stream() -> Result<bool> {
         Ok(false)
     }
@@ -164,6 +212,7 @@ macro_rules! export_manga_plugin {
         $crate::__export_last_error!();
         $crate::__export_image_requests!($type, $crate::provider::MangaProvider);
         $crate::__export_completion!($type, $crate::provider::MangaProvider, mark_chapter_read);
+        $crate::__export_settings_actions!($type, $crate::provider::MangaProvider);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -450,6 +499,7 @@ macro_rules! export_novel_plugin {
         $crate::__export_last_error!();
         $crate::__export_image_requests!($type, $crate::provider::NovelProvider);
         $crate::__export_completion!($type, $crate::provider::NovelProvider, mark_chapter_read);
+        $crate::__export_settings_actions!($type, $crate::provider::NovelProvider);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
@@ -713,6 +763,7 @@ macro_rules! export_anime_plugin {
         $crate::__export_last_error!();
         $crate::__export_image_requests!($type, $crate::provider::AnimeProvider);
         $crate::__export_completion!($type, $crate::provider::AnimeProvider, mark_episode_watched);
+        $crate::__export_settings_actions!($type, $crate::provider::AnimeProvider);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
