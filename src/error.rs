@@ -22,6 +22,9 @@ pub enum Error {
     Server(String),
     /// What was asked for doesn't exist.
     NotFound(String),
+    /// The service needs the user to sign in on its website. Hosts offer a sign-in page for the
+    /// plugin's manifest `url`; cookies from that sign-in are sent on later requests.
+    NeedsLogin(String),
 }
 
 impl fmt::Display for Error {
@@ -36,7 +39,8 @@ impl fmt::Display for Error {
             Error::NeedsSetup(msg)
             | Error::Unauthorized(msg)
             | Error::Server(msg)
-            | Error::NotFound(msg) => write!(f, "{}", msg),
+            | Error::NotFound(msg)
+            | Error::NeedsLogin(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -71,6 +75,9 @@ pub enum ErrorCategory {
     Other = 5,
     /// The provider explicitly does not participate in this optional operation.
     Unsupported = 6,
+    /// The user must sign in on the service's website. Hosts before ito-runner `needsLogin`
+    /// support can't decode it: return it only once the plugin's minimum app version has it.
+    NeedsLogin = 7,
 }
 
 /// A failure as hosts read it from `ito_last_error`.
@@ -92,6 +99,7 @@ impl Error {
             Error::Net(_) => ErrorCategory::Network,
             Error::Server(_) => ErrorCategory::Server,
             Error::NotFound(_) => ErrorCategory::NotFound,
+            Error::NeedsLogin(_) => ErrorCategory::NeedsLogin,
             Error::Unsupported => ErrorCategory::Unsupported,
             Error::Html(_) | Error::Postcard(_) | Error::Utf8(_) | Error::Host(_) => {
                 ErrorCategory::Other
@@ -108,7 +116,8 @@ impl Error {
             | Error::NeedsSetup(msg)
             | Error::Unauthorized(msg)
             | Error::Server(msg)
-            | Error::NotFound(msg) => msg.clone(),
+            | Error::NotFound(msg)
+            | Error::NeedsLogin(msg) => msg.clone(),
             _ => self.to_string(),
         }
     }
@@ -184,6 +193,7 @@ mod tests {
             (Error::Host("Something else".into()), ErrorCategory::Other, "Something else"),
             (Error::Host("Unsupported operation".into()), ErrorCategory::Other, "Unsupported operation"),
             (Error::Unauthorized("Unsupported operation".into()), ErrorCategory::Unauthorized, "Unsupported operation"),
+            (Error::NeedsLogin("Sign in to read".into()), ErrorCategory::NeedsLogin, "Sign in to read"),
             (Error::Unsupported, ErrorCategory::Unsupported, "Unsupported operation"),
         ];
         for (error, category, message) in cases {
@@ -202,5 +212,7 @@ mod tests {
         assert_eq!(bytes[0], 10);
         let bytes = postcard::to_allocvec(&Error::Unsupported.report()).unwrap_or_default();
         assert_eq!(bytes[0], 12);
+        let bytes = postcard::to_allocvec(&Error::NeedsLogin("x".into()).report()).unwrap_or_default();
+        assert_eq!(bytes[0], 14);
     }
 }
