@@ -3,7 +3,7 @@
 use crate::Result;
 use serde::Serialize;
 
-/// Packs either native image export's result with the standard allocation protocol.
+/// Packs an export result with the standard allocation protocol (also used by settings diagnostics).
 #[doc(hidden)]
 pub fn __pack_result<T: Serialize>(export: &str, result: Result<T>) -> i64 {
     let bytes = match result.and_then(|value| postcard::to_allocvec(&value).map_err(crate::Error::from)) {
