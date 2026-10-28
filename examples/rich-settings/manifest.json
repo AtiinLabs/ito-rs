@@ -1,0 +1,9 @@
+{
+  "id": "moe.itoapp.example.rich-settings",
+  "name": "Rich Controls Example",
+  "version": "1.0.0",
+  "min_app_version": "1.4.0",
+  "type": "manga",
+  "language": "en",
+  "description": "Local sample catalog demonstrating source settings and search controls."
+}

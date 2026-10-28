@@ -1,3 +1,12 @@
+//! Source-provider SDK for Ito plugins.
+//!
+//! Version 0.7 adds optional rich settings, paged option catalogs and search capabilities
+//! through [`controls`], while keeping ABI 2 and all existing wire layouts unchanged.
+//! Providers may retain legacy settings for older hosts; the rich-control exports opt out
+//! with [`Error::Unsupported`] unless implemented.
+
+pub mod controls;
+
 #[doc(hidden)]
 pub mod completion;
 pub mod defaults;

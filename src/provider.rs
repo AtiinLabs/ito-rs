@@ -12,16 +12,21 @@
 //! - `get_listing(listing, page) -> MediaPageResult`;
 //! - `search(query, page, kind, filters) -> MediaPageResult`, `kind` a `MediaKind` value or -1
 //!   for every kind the source serves;
+//! - optional rich-control exports: `get_settings_form`, `get_search_capabilities(kind)`,
+//!   `get_option_page(request)`, and `get_search_suggestions(query, kind)`. Unsupported means absent.
 //! - `get_media_update(entry, needs_details, needs_units) -> MediaEntry`;
 //! - `get_chapter_pages(entry, chapter) -> Vec<Page>`;
 //! - `get_episode_videos(anime, episode) -> Vec<Video>`;
 //! - `mark_completed(kind, media_key, unit_key) -> i32` (1 on success).
 
+use crate::controls::{
+    OptionPage, OptionRequest, SearchCapabilities, SearchSuggestion, SettingsForm,
+};
 use crate::models::{
+    Chapter, FilterItem, HomeLayout, Listing, MediaEntry, MediaKind, MediaPageResult, Page,
     anime::{self, Anime, Episode, Video},
     manga::{self, Manga},
     novel::{self, Novel},
-    Chapter, FilterItem, HomeLayout, Listing, MediaEntry, MediaKind, MediaPageResult, Page,
 };
 use crate::{Error, Result};
 use std::marker::PhantomData;
@@ -56,10 +61,29 @@ pub trait SourceProvider {
         Err(Error::Unsupported)
     }
 
+    /// Returns a local rich settings form; Unsupported lets hosts use `get_settings`.
+    fn get_settings_form() -> Result<SettingsForm> {
+        Err(Error::Unsupported)
+    }
+    /// Declares the search controls for one media kind, or every kind when `kind` is `None`.
+    fn get_search_capabilities(_kind: Option<MediaKind>) -> Result<SearchCapabilities> {
+        Err(Error::Unsupported)
+    }
+    /// Resolves an inline option catalog page or selected option labels.
+    fn get_option_page(_request: OptionRequest) -> Result<OptionPage> {
+        Err(Error::Unsupported)
+    }
+    /// Returns bounded query completions for the requested kind.
+    fn get_search_suggestions(
+        _query: &str,
+        _kind: Option<MediaKind>,
+    ) -> Result<Vec<SearchSuggestion>> {
+        Err(Error::Unsupported)
+    }
     fn get_listing(listing: Listing, page: i32) -> Result<MediaPageResult>;
 
-    /// `kind` narrows the search to one of `KINDS`; `None` searches every kind the source
-    /// serves. `filters` is reserved: hosts send an empty list.
+    /// `kind` narrows search to a served kind; `None` searches every served kind. Hosts send
+    /// canonical `FilterItem` values when rich search capabilities are available, otherwise `[]`.
     fn search(
         query: &str,
         page: i32,
@@ -69,7 +93,11 @@ pub trait SourceProvider {
 
     /// Returns `entry` with its details and/or its chapters or episodes filled in. The result
     /// must be the same kind as `entry`.
-    fn get_media_update(entry: MediaEntry, needs_details: bool, needs_units: bool) -> Result<MediaEntry>;
+    fn get_media_update(
+        entry: MediaEntry,
+        needs_details: bool,
+        needs_units: bool,
+    ) -> Result<MediaEntry>;
 
     /// The pages of a manga or novel chapter, read as the chapter's `kind` says.
     fn get_chapter_pages(_entry: MediaEntry, _chapter: Chapter) -> Result<Vec<Page>> {
@@ -134,9 +162,25 @@ pub trait MangaProvider {
         Err(crate::Error::Unsupported)
     }
 
+    /// Returns a rich settings form, or `Unsupported` to retain the legacy schema.
+    fn get_settings_form() -> Result<SettingsForm> {
+        Err(Error::Unsupported)
+    }
+    /// Declares search controls for this single-kind provider.
+    fn get_search_capabilities() -> Result<SearchCapabilities> {
+        Err(Error::Unsupported)
+    }
+    /// Serves an option-catalog page or selected-value labels.
+    fn get_option_page(_request: OptionRequest) -> Result<OptionPage> {
+        Err(Error::Unsupported)
+    }
+    /// Suggests completions for a search query.
+    fn get_search_suggestions(_query: &str) -> Result<Vec<SearchSuggestion>> {
+        Err(Error::Unsupported)
+    }
     fn get_manga_list(listing: Listing, page: i32) -> Result<manga::PageResult>;
 
-    /// `filters` is reserved: hosts send an empty list until plugins can declare filters.
+    /// `filters` carries canonical rich-control strings when supported; otherwise it is empty.
     fn get_search_manga_list(
         query: &str,
         page: i32,
@@ -204,9 +248,26 @@ pub trait AnimeProvider {
     fn validate_settings() -> Result<Vec<crate::models::SettingIssue>> {
         Err(crate::Error::Unsupported)
     }
+    /// Returns a rich settings form, or `Unsupported` to retain the legacy schema.
+    fn get_settings_form() -> Result<SettingsForm> {
+        Err(Error::Unsupported)
+    }
+    /// Declares search controls for this single-kind provider.
+    fn get_search_capabilities() -> Result<SearchCapabilities> {
+        Err(Error::Unsupported)
+    }
+    /// Serves an option-catalog page or selected-value labels.
+    fn get_option_page(_request: OptionRequest) -> Result<OptionPage> {
+        Err(Error::Unsupported)
+    }
+    /// Suggests completions for a search query.
+    fn get_search_suggestions(_query: &str) -> Result<Vec<SearchSuggestion>> {
+        Err(Error::Unsupported)
+    }
 
     fn get_anime_list(listing: Listing, page: i32) -> Result<anime::PageResult>;
 
+    /// `filters` contains rich-control canonical strings when supported; otherwise it is empty.
     fn get_search_anime_list(
         query: &str,
         page: i32,
@@ -264,9 +325,26 @@ pub trait NovelProvider {
     fn validate_settings() -> Result<Vec<crate::models::SettingIssue>> {
         Err(crate::Error::Unsupported)
     }
+    /// Returns a rich settings form, or `Unsupported` to retain the legacy schema.
+    fn get_settings_form() -> Result<SettingsForm> {
+        Err(Error::Unsupported)
+    }
+    /// Declares search controls for this single-kind provider.
+    fn get_search_capabilities() -> Result<SearchCapabilities> {
+        Err(Error::Unsupported)
+    }
+    /// Serves an option-catalog page or selected-value labels.
+    fn get_option_page(_request: OptionRequest) -> Result<OptionPage> {
+        Err(Error::Unsupported)
+    }
+    /// Suggests completions for a search query.
+    fn get_search_suggestions(_query: &str) -> Result<Vec<SearchSuggestion>> {
+        Err(Error::Unsupported)
+    }
 
     fn get_novel_list(listing: Listing, page: i32) -> Result<novel::PageResult>;
 
+    /// `filters` contains rich-control canonical strings when supported; otherwise it is empty.
     fn get_search_novel_list(
         query: &str,
         page: i32,
@@ -318,6 +396,29 @@ impl<T: MangaProvider> SourceProvider for MangaSource<T> {
     fn get_settings() -> Option<crate::models::SettingsSchema> {
         T::get_settings()
     }
+    fn get_settings_form() -> Result<SettingsForm> {
+        T::get_settings_form()
+    }
+    fn get_search_capabilities(kind: Option<MediaKind>) -> Result<SearchCapabilities> {
+        if kind.is_some_and(|k| k != MediaKind::Manga) {
+            Err(Error::Unsupported)
+        } else {
+            T::get_search_capabilities()
+        }
+    }
+    fn get_option_page(request: OptionRequest) -> Result<OptionPage> {
+        T::get_option_page(request)
+    }
+    fn get_search_suggestions(
+        query: &str,
+        kind: Option<MediaKind>,
+    ) -> Result<Vec<SearchSuggestion>> {
+        if kind.is_some_and(|k| k != MediaKind::Manga) {
+            Err(Error::Unsupported)
+        } else {
+            T::get_search_suggestions(query)
+        }
+    }
 
     fn get_settings_actions() -> Result<Vec<crate::models::SettingsAction>> {
         T::get_settings_actions()
@@ -335,16 +436,27 @@ impl<T: MangaProvider> SourceProvider for MangaSource<T> {
         T::get_manga_list(listing, page).map(Into::into)
     }
 
-    fn search(query: &str, page: i32, kind: Option<MediaKind>, filters: Vec<FilterItem>) -> Result<MediaPageResult> {
+    fn search(
+        query: &str,
+        page: i32,
+        kind: Option<MediaKind>,
+        filters: Vec<FilterItem>,
+    ) -> Result<MediaPageResult> {
         if kind.is_some_and(|kind| kind != MediaKind::Manga) {
             return Ok(empty_page());
         }
         T::get_search_manga_list(query, page, filters).map(Into::into)
     }
 
-    fn get_media_update(entry: MediaEntry, needs_details: bool, needs_units: bool) -> Result<MediaEntry> {
+    fn get_media_update(
+        entry: MediaEntry,
+        needs_details: bool,
+        needs_units: bool,
+    ) -> Result<MediaEntry> {
         match entry {
-            MediaEntry::Manga(manga) => T::get_manga_update(manga, needs_details, needs_units).map(MediaEntry::Manga),
+            MediaEntry::Manga(manga) => {
+                T::get_manga_update(manga, needs_details, needs_units).map(MediaEntry::Manga)
+            }
             _ => Err(Error::Unsupported),
         }
     }
@@ -393,6 +505,29 @@ impl<T: AnimeProvider> SourceProvider for AnimeSource<T> {
     fn get_settings() -> Option<crate::models::SettingsSchema> {
         T::get_settings()
     }
+    fn get_settings_form() -> Result<SettingsForm> {
+        T::get_settings_form()
+    }
+    fn get_search_capabilities(kind: Option<MediaKind>) -> Result<SearchCapabilities> {
+        if kind.is_some_and(|k| k != MediaKind::Anime) {
+            Err(Error::Unsupported)
+        } else {
+            T::get_search_capabilities()
+        }
+    }
+    fn get_option_page(request: OptionRequest) -> Result<OptionPage> {
+        T::get_option_page(request)
+    }
+    fn get_search_suggestions(
+        query: &str,
+        kind: Option<MediaKind>,
+    ) -> Result<Vec<SearchSuggestion>> {
+        if kind.is_some_and(|k| k != MediaKind::Anime) {
+            Err(Error::Unsupported)
+        } else {
+            T::get_search_suggestions(query)
+        }
+    }
 
     fn get_settings_actions() -> Result<Vec<crate::models::SettingsAction>> {
         T::get_settings_actions()
@@ -410,16 +545,27 @@ impl<T: AnimeProvider> SourceProvider for AnimeSource<T> {
         T::get_anime_list(listing, page).map(Into::into)
     }
 
-    fn search(query: &str, page: i32, kind: Option<MediaKind>, filters: Vec<FilterItem>) -> Result<MediaPageResult> {
+    fn search(
+        query: &str,
+        page: i32,
+        kind: Option<MediaKind>,
+        filters: Vec<FilterItem>,
+    ) -> Result<MediaPageResult> {
         if kind.is_some_and(|kind| kind != MediaKind::Anime) {
             return Ok(empty_page());
         }
         T::get_search_anime_list(query, page, filters).map(Into::into)
     }
 
-    fn get_media_update(entry: MediaEntry, needs_details: bool, needs_units: bool) -> Result<MediaEntry> {
+    fn get_media_update(
+        entry: MediaEntry,
+        needs_details: bool,
+        needs_units: bool,
+    ) -> Result<MediaEntry> {
         match entry {
-            MediaEntry::Anime(anime) => T::get_anime_update(anime, needs_details, needs_units).map(MediaEntry::Anime),
+            MediaEntry::Anime(anime) => {
+                T::get_anime_update(anime, needs_details, needs_units).map(MediaEntry::Anime)
+            }
             _ => Err(Error::Unsupported),
         }
     }
@@ -461,6 +607,29 @@ impl<T: NovelProvider> SourceProvider for NovelSource<T> {
     fn get_settings() -> Option<crate::models::SettingsSchema> {
         T::get_settings()
     }
+    fn get_settings_form() -> Result<SettingsForm> {
+        T::get_settings_form()
+    }
+    fn get_search_capabilities(kind: Option<MediaKind>) -> Result<SearchCapabilities> {
+        if kind.is_some_and(|k| k != MediaKind::Novel) {
+            Err(Error::Unsupported)
+        } else {
+            T::get_search_capabilities()
+        }
+    }
+    fn get_option_page(request: OptionRequest) -> Result<OptionPage> {
+        T::get_option_page(request)
+    }
+    fn get_search_suggestions(
+        query: &str,
+        kind: Option<MediaKind>,
+    ) -> Result<Vec<SearchSuggestion>> {
+        if kind.is_some_and(|k| k != MediaKind::Novel) {
+            Err(Error::Unsupported)
+        } else {
+            T::get_search_suggestions(query)
+        }
+    }
 
     fn get_settings_actions() -> Result<Vec<crate::models::SettingsAction>> {
         T::get_settings_actions()
@@ -478,16 +647,27 @@ impl<T: NovelProvider> SourceProvider for NovelSource<T> {
         T::get_novel_list(listing, page).map(Into::into)
     }
 
-    fn search(query: &str, page: i32, kind: Option<MediaKind>, filters: Vec<FilterItem>) -> Result<MediaPageResult> {
+    fn search(
+        query: &str,
+        page: i32,
+        kind: Option<MediaKind>,
+        filters: Vec<FilterItem>,
+    ) -> Result<MediaPageResult> {
         if kind.is_some_and(|kind| kind != MediaKind::Novel) {
             return Ok(empty_page());
         }
         T::get_search_novel_list(query, page, filters).map(Into::into)
     }
 
-    fn get_media_update(entry: MediaEntry, needs_details: bool, needs_units: bool) -> Result<MediaEntry> {
+    fn get_media_update(
+        entry: MediaEntry,
+        needs_details: bool,
+        needs_units: bool,
+    ) -> Result<MediaEntry> {
         match entry {
-            MediaEntry::Novel(novel) => T::get_novel_update(novel, needs_details, needs_units).map(MediaEntry::Novel),
+            MediaEntry::Novel(novel) => {
+                T::get_novel_update(novel, needs_details, needs_units).map(MediaEntry::Novel)
+            }
             _ => Err(Error::Unsupported),
         }
     }
@@ -548,6 +728,7 @@ macro_rules! export_plugin {
         $crate::__export_last_error!();
         $crate::__export_image_requests!($type, $crate::provider::SourceProvider);
         $crate::__export_settings_actions!($type, $crate::provider::SourceProvider);
+        $crate::__export_controls!($type, $crate::provider::SourceProvider);
 
         #[unsafe(no_mangle)]
         pub extern "C" fn ito_supported_kinds() -> u32 {
@@ -594,7 +775,10 @@ macro_rules! export_plugin {
         #[unsafe(no_mangle)]
         pub extern "C" fn get_listing(listing_ptr: i32, listing_len: i32, page: i32) -> i64 {
             let listing = unsafe { $crate::export::__bytes(listing_ptr, listing_len) };
-            $crate::image::__pack_result("get_listing", $crate::export::__listing::<$type>(listing, page))
+            $crate::image::__pack_result(
+                "get_listing",
+                $crate::export::__listing::<$type>(listing, page),
+            )
         }
 
         #[unsafe(no_mangle)]
@@ -608,7 +792,10 @@ macro_rules! export_plugin {
         ) -> i64 {
             let query = unsafe { $crate::export::__bytes(query_ptr, query_len) };
             let filters = unsafe { $crate::export::__bytes(filters_ptr, filters_len) };
-            $crate::image::__pack_result("search", $crate::export::__search::<$type>(query, page, kind, filters))
+            $crate::image::__pack_result(
+                "search",
+                $crate::export::__search::<$type>(query, page, kind, filters),
+            )
         }
 
         #[unsafe(no_mangle)]
@@ -634,7 +821,10 @@ macro_rules! export_plugin {
         ) -> i64 {
             let entry = unsafe { $crate::export::__bytes(entry_ptr, entry_len) };
             let chapter = unsafe { $crate::export::__bytes(chapter_ptr, chapter_len) };
-            $crate::image::__pack_result("get_chapter_pages", $crate::export::__chapter_pages::<$type>(entry, chapter))
+            $crate::image::__pack_result(
+                "get_chapter_pages",
+                $crate::export::__chapter_pages::<$type>(entry, chapter),
+            )
         }
 
         #[unsafe(no_mangle)]
@@ -674,8 +864,8 @@ macro_rules! export_plugin {
 mod tests {
     use super::*;
     use crate::models::{
-        manga::{ContentRating, Status, Viewer},
         ContentKind,
+        manga::{ContentRating, Status, Viewer},
     };
     use std::cell::RefCell;
 
@@ -728,21 +918,38 @@ mod tests {
 
     impl MangaProvider for Shelf {
         fn get_manga_list(_listing: Listing, _page: i32) -> Result<manga::PageResult> {
-            Ok(manga::PageResult { entries: vec![manga("listed")], has_next_page: true })
+            Ok(manga::PageResult {
+                entries: vec![manga("listed")],
+                has_next_page: true,
+            })
         }
 
-        fn get_search_manga_list(query: &str, _page: i32, _filters: Vec<FilterItem>) -> Result<manga::PageResult> {
+        fn get_search_manga_list(
+            query: &str,
+            _page: i32,
+            _filters: Vec<FilterItem>,
+        ) -> Result<manga::PageResult> {
             record(format!("search {query}"));
-            Ok(manga::PageResult { entries: vec![manga(query)], has_next_page: false })
+            Ok(manga::PageResult {
+                entries: vec![manga(query)],
+                has_next_page: false,
+            })
         }
 
-        fn get_manga_update(mut manga: Manga, _needs_details: bool, _needs_chapters: bool) -> Result<Manga> {
+        fn get_manga_update(
+            mut manga: Manga,
+            _needs_details: bool,
+            _needs_chapters: bool,
+        ) -> Result<Manga> {
             manga.title = "updated".into();
             Ok(manga)
         }
 
         fn get_page_list(manga: Manga, chapter: Chapter) -> Result<Vec<Page>> {
-            record(format!("pages {} {} {:?}", manga.key, chapter.key, chapter.kind));
+            record(format!(
+                "pages {} {} {:?}",
+                manga.key, chapter.key, chapter.kind
+            ));
             Ok(Vec::new())
         }
 
@@ -760,7 +967,10 @@ mod tests {
 
         let novels = Source::search("q", 1, Some(MediaKind::Novel), Vec::new()).unwrap();
         assert!(novels.entries.is_empty() && !novels.has_next_page);
-        assert!(calls().is_empty(), "a search for another kind must not reach the plugin");
+        assert!(
+            calls().is_empty(),
+            "a search for another kind must not reach the plugin"
+        );
 
         let any = Source::search("q", 1, None, Vec::new()).unwrap();
         let manga = Source::search("m", 1, Some(MediaKind::Manga), Vec::new()).unwrap();
@@ -778,15 +988,26 @@ mod tests {
 
     #[test]
     fn a_single_kind_source_passes_its_own_entries_and_chapters_through() {
-        let listed = Source::get_listing(Listing { id: "l".into(), name: "L".into(), kind: 0 }, 1).unwrap();
+        let listed = Source::get_listing(
+            Listing {
+                id: "l".into(),
+                name: "L".into(),
+                kind: 0,
+            },
+            1,
+        )
+        .unwrap();
         assert!(listed.has_next_page);
         assert!(matches!(&listed.entries[..], [MediaEntry::Manga(found)] if found.key == "listed"));
 
         let updated = Source::get_media_update(MediaEntry::Manga(manga("s")), true, true).unwrap();
-        assert!(matches!(updated, MediaEntry::Manga(found) if found.key == "s" && found.title == "updated"));
+        assert!(
+            matches!(updated, MediaEntry::Manga(found) if found.key == "s" && found.title == "updated")
+        );
 
         // A text chapter of a manga reaches the manga plugin with its kind intact.
-        Source::get_chapter_pages(MediaEntry::Manga(manga("s")), chapter(ContentKind::Text)).unwrap();
+        Source::get_chapter_pages(MediaEntry::Manga(manga("s")), chapter(ContentKind::Text))
+            .unwrap();
         assert_eq!(calls(), ["pages s c1 Text"]);
 
         let novel = Novel {
@@ -818,15 +1039,29 @@ mod tests {
 
     impl AnimeProvider for Shows {
         fn get_anime_list(_listing: Listing, _page: i32) -> Result<anime::PageResult> {
-            Ok(anime::PageResult { entries: Vec::new(), has_next_page: false })
+            Ok(anime::PageResult {
+                entries: Vec::new(),
+                has_next_page: false,
+            })
         }
 
-        fn get_search_anime_list(query: &str, _page: i32, _filters: Vec<FilterItem>) -> Result<anime::PageResult> {
+        fn get_search_anime_list(
+            query: &str,
+            _page: i32,
+            _filters: Vec<FilterItem>,
+        ) -> Result<anime::PageResult> {
             record(format!("search {query}"));
-            Ok(anime::PageResult { entries: Vec::new(), has_next_page: false })
+            Ok(anime::PageResult {
+                entries: Vec::new(),
+                has_next_page: false,
+            })
         }
 
-        fn get_anime_update(anime: Anime, _needs_details: bool, _needs_episodes: bool) -> Result<Anime> {
+        fn get_anime_update(
+            anime: Anime,
+            _needs_details: bool,
+            _needs_episodes: bool,
+        ) -> Result<Anime> {
             Ok(anime)
         }
 
@@ -876,7 +1111,10 @@ mod tests {
             Err(Error::Unsupported)
         ));
         Source::mark_completed(MediaKind::Anime, "a", "e").unwrap();
-        assert!(matches!(Source::mark_completed(MediaKind::Manga, "a", "e"), Err(Error::Unsupported)));
+        assert!(matches!(
+            Source::mark_completed(MediaKind::Manga, "a", "e"),
+            Err(Error::Unsupported)
+        ));
         assert_eq!(calls(), ["search q", "videos a e", "watched a e"]);
     }
 
@@ -884,19 +1122,36 @@ mod tests {
 
     impl NovelProvider for Library {
         fn get_novel_list(_listing: Listing, _page: i32) -> Result<novel::PageResult> {
-            Ok(novel::PageResult { entries: Vec::new(), has_next_page: false })
+            Ok(novel::PageResult {
+                entries: Vec::new(),
+                has_next_page: false,
+            })
         }
 
-        fn get_search_novel_list(_query: &str, _page: i32, _filters: Vec<FilterItem>) -> Result<novel::PageResult> {
-            Ok(novel::PageResult { entries: Vec::new(), has_next_page: false })
+        fn get_search_novel_list(
+            _query: &str,
+            _page: i32,
+            _filters: Vec<FilterItem>,
+        ) -> Result<novel::PageResult> {
+            Ok(novel::PageResult {
+                entries: Vec::new(),
+                has_next_page: false,
+            })
         }
 
-        fn get_novel_update(novel: Novel, _needs_details: bool, _needs_chapters: bool) -> Result<Novel> {
+        fn get_novel_update(
+            novel: Novel,
+            _needs_details: bool,
+            _needs_chapters: bool,
+        ) -> Result<Novel> {
             Ok(novel)
         }
 
         fn get_chapter_content(novel: Novel, chapter: Chapter) -> Result<Vec<Page>> {
-            record(format!("content {} {} {:?}", novel.key, chapter.key, chapter.kind));
+            record(format!(
+                "content {} {} {:?}",
+                novel.key, chapter.key, chapter.kind
+            ));
             Ok(Vec::new())
         }
 
@@ -930,7 +1185,10 @@ mod tests {
             Err(Error::Unsupported)
         ));
         Source::mark_completed(MediaKind::Novel, "n", "c1").unwrap();
-        assert!(matches!(Source::mark_completed(MediaKind::Manga, "n", "c1"), Err(Error::Unsupported)));
+        assert!(matches!(
+            Source::mark_completed(MediaKind::Manga, "n", "c1"),
+            Err(Error::Unsupported)
+        ));
         assert_eq!(calls(), ["content n c1 Text", "read n c1"]);
     }
 }

@@ -11,6 +11,8 @@ unsafe extern "C" {
     pub fn select(id: i32, ptr: i32, len: i32) -> i64;
     pub fn text(id: i32) -> i64;
     pub fn attr(id: i32, ptr: i32, len: i32) -> i64;
+    // A native test binary must not bind this handle-based import to the C allocator.
+    #[cfg_attr(not(target_arch = "wasm32"), link_name = "ito_html_free")]
     pub fn free(id: i32);
     pub fn html_content(id: i32) -> i64;
     pub fn outer_html(id: i32) -> i64;
