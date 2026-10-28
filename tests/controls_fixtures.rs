@@ -306,6 +306,50 @@ fn every_shared_wire_fixture_has_exact_structure_and_validation() {
                 check(&v, &bytes, name);
                 validate_capabilities(&v)
             }
+            "option_page.utf8_distinct" | "option_page.utf8_wrong_normalization" => {
+                let distinct = name == "option_page.utf8_distinct";
+                let requested = if distinct {
+                    vec!["é", "e\u{301}"]
+                } else {
+                    vec!["é"]
+                };
+                let returned = if distinct {
+                    vec!["é", "e\u{301}"]
+                } else {
+                    vec!["e\u{301}"]
+                };
+                let request = OptionRequest {
+                    catalog: "tags".into(),
+                    query: OptionQuery::Values(requested.into_iter().map(String::from).collect()),
+                    limit: if distinct { 2 } else { 1 },
+                };
+                let page = OptionPage {
+                    options: returned
+                        .into_iter()
+                        .map(|v| ChoiceOption::new(v, "Label"))
+                        .collect(),
+                    next_offset: None,
+                    total: None,
+                    revision: None,
+                };
+                check(&page, &bytes, name);
+                validate_page(&page, &request)
+            }
+            "option_request.utf8_distinct" | "option_request.utf8_composed" => {
+                let distinct = name == "option_request.utf8_distinct";
+                let values = if distinct {
+                    vec!["é", "e\u{301}"]
+                } else {
+                    vec!["é"]
+                };
+                let request = OptionRequest {
+                    catalog: "tags".into(),
+                    query: OptionQuery::Values(values.into_iter().map(String::from).collect()),
+                    limit: if distinct { 2 } else { 1 },
+                };
+                check(&request, &bytes, name);
+                validate_request(&request)
+            }
             "option_page.first"
             | "option_page.values"
             | "option_page.no_progress"
@@ -445,6 +489,19 @@ fn every_shared_canonical_value_checks_both_directions() {
             }
             _ => unreachable!(),
         };
+        if entry["runtime_invalid"] == true {
+            assert_eq!(
+                expected.canonical(),
+                raw,
+                "syntax-only canonical writer {entry}"
+            );
+            assert!(kind.parse_value(raw).is_err(), "runtime accepted {entry}");
+            assert!(
+                !kind.accepts(&expected),
+                "runtime accepted typed value {entry}"
+            );
+            continue;
+        }
         assert_eq!(
             kind.parse_value(raw).unwrap(),
             expected,

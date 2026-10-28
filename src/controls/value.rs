@@ -176,7 +176,7 @@ impl ControlKind {
             }
         }
     }
-    /// Parses strict canonical syntax and bounds, without checking inline option membership.
+    /// Parses canonical runtime values and bounds, without checking inline option membership.
     pub fn parse_value(&self, s: &str) -> Result<ControlValue, ValueError> {
         Ok(match self {
             Self::Toggle(_) => ControlValue::Toggle(match s {
@@ -194,13 +194,16 @@ impl ControlKind {
             }
             Self::Secret(_) => return Err(ValueError),
             Self::Select(_) => {
-                if s.len() > 256 || s.bytes().any(|b| b < 32 || b == 127) {
+                if s.len() > 256 || !super::limits::human_chars(s, false) {
                     return Err(ValueError);
                 }
                 ControlValue::Select((!s.is_empty()).then(|| s.to_owned()))
             }
             Self::MultiSelect(c) => {
                 let values = parse_strings(s, c.max_selected.unwrap_or(500).min(500) as usize)?;
+                if values.iter().any(|v| !super::limits::human_chars(v, false)) {
+                    return Err(ValueError);
+                }
                 ControlValue::MultiSelect(values)
             }
             Self::Integer(c) => {
@@ -238,5 +241,33 @@ pub(crate) fn filter_item(control: &Control, value: &ControlValue) -> FilterItem
         type_name: control.kind.wire_name().into(),
         name: control.id.clone(),
         value: FilterValue::String(value.canonical()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_string_syntax_can_round_trip_runtime_invalid_controls() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../fixtures/controls-v1.json")).unwrap();
+        for entry in fixture["values"].as_array().unwrap() {
+            if entry["runtime_invalid"] != true {
+                continue;
+            }
+            let raw = entry["canonical"].as_str().unwrap();
+            let strings = parse_strings(raw, 500).expect("valid canonical string syntax");
+            let expected: Vec<String> = entry["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap().to_owned())
+                .collect();
+            assert_eq!(strings, expected, "syntax fixture {entry}");
+            assert_eq!(ControlValue::MultiSelect(strings).canonical(), raw);
+            let kind = Control::multi_select("m", "Multi", OptionSource::catalog("c"), vec![]).kind;
+            assert!(kind.parse_value(raw).is_err(), "runtime accepted {raw:?}");
+        }
     }
 }

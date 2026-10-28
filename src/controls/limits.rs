@@ -121,7 +121,7 @@ fn value(s: &str, rule: Rule, context: Option<&str>) -> Result<(), Violation> {
     if !(1..=256).contains(&s.len()) {
         return Err(fail(rule, context));
     }
-    if s.bytes().any(|b| b < 32 || b == 127) {
+    if !human_chars(s, false) {
         return Err(fail(Rule::CharsValue, context));
     }
     Ok(())

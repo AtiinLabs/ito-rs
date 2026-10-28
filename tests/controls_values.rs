@@ -303,3 +303,137 @@ fn envelopes_round_trip_nested_lengths_and_reject_trailing_bodies() {
         assert_eq!(&decoded, c);
     }
 }
+
+#[test]
+fn runtime_option_controls_reject_all_c0_c1_characters_across_helpers() {
+    let multi = Control::multi_select(
+        "tags",
+        "Tags",
+        OptionSource::catalog("tags"),
+        vec!["a".into()],
+    );
+    let select = Control::select("choice", "Choice", OptionSource::catalog("tags"), None);
+    let f = SettingsForm::new(vec![
+        ControlSection::new("section", "Section").control(multi.clone()),
+    ]);
+    let cap = SearchCapabilities {
+        flags: 0,
+        sort: None,
+        sections: f.sections.clone(),
+    };
+    for code in (0..=31).chain(127..=159) {
+        let invalid = format!("a{}", char::from_u32(code).unwrap());
+        let value = ControlValue::MultiSelect(vec![invalid.clone()]);
+        let raw = value.canonical();
+        assert!(
+            multi.kind.parse_value(&raw).is_err(),
+            "accepted U+{code:04X}"
+        );
+        assert!(!multi.kind.accepts(&value), "accepted U+{code:04X}");
+        assert!(write_setting(&multi, &value).is_err(), "wrote U+{code:04X}");
+        assert!(
+            select.kind.parse_value(&invalid).is_err(),
+            "select accepted U+{code:04X}"
+        );
+        let saved = ControlValues::settings_with(&f, |_| Some(raw.clone()));
+        assert_eq!(saved.multi_select("tags").unwrap(), &["a"]);
+        assert_eq!(saved.issues().len(), 1);
+        assert_eq!(saved.issues()[0].key, "tags");
+        assert!(ControlValues::search(&cap, &[item("tags", "multi_select", &raw)]).is_err());
+        let dense = cap.filter_items(&HashMap::from([("tags".into(), value)]));
+        let effective = ControlValues::search(&cap, &dense).unwrap();
+        assert_eq!(effective.multi_select("tags").unwrap(), &["a"]);
+    }
+}
+
+#[test]
+fn visible_search_controls_use_accepted_values_or_defaults_before_conditions() {
+    let cap = SearchCapabilities {
+        flags: 0,
+        sort: None,
+        sections: vec![
+            ControlSection::new("section", "Section")
+                .control(Control::toggle("enabled", "Enabled", false))
+                .control(
+                    Control::text("dependent", "Dependent", "")
+                        .visible_when("enabled", vec!["true".into()]),
+                )
+                .control(Control::select(
+                    "choice",
+                    "Choice",
+                    OptionSource::catalog("tags"),
+                    Some("é".into()),
+                ))
+                .control(
+                    Control::text("exact", "Exact", "").visible_when("choice", vec!["é".into()]),
+                )
+                .control(
+                    Control::text("missing", "Missing", "")
+                        .visible_when("undeclared", vec!["true".into()]),
+                ),
+        ],
+    };
+    for supplied in [
+        HashMap::new(),
+        HashMap::from([("enabled".into(), ControlValue::Text("true".into()))]),
+        HashMap::from([("enabled".into(), ControlValue::Select(Some("true".into())))]),
+    ] {
+        let visible = cap.visible_control_ids(&supplied);
+        assert!(!visible.contains("dependent"));
+        assert!(
+            visible.contains("exact"),
+            "default select must precede conditions"
+        );
+        assert!(
+            !visible.contains("missing"),
+            "absent target cannot satisfy a condition"
+        );
+        let dense = cap.filter_items(&supplied);
+        let effective = ControlValues::search(&cap, &dense).unwrap();
+        assert!(!effective.toggle("enabled").unwrap());
+    }
+    let supplied = HashMap::from([
+        ("enabled".into(), ControlValue::Toggle(true)),
+        (
+            "choice".into(),
+            ControlValue::Select(Some("e\u{301}".into())),
+        ),
+    ]);
+    let visible = cap.visible_control_ids(&supplied);
+    assert!(visible.contains("dependent"));
+    assert!(
+        !visible.contains("exact"),
+        "opaque values must not normalize"
+    );
+}
+
+#[test]
+fn opaque_multi_values_preserve_distinct_utf8_through_settings_and_search() {
+    let expected = vec!["é".to_owned(), "e\u{301}".to_owned()];
+    let control = Control::multi_select(
+        "tags",
+        "Tags",
+        OptionSource::inline(vec![
+            ChoiceOption::new("é", "Composed"),
+            ChoiceOption::new("e\u{301}", "Decomposed"),
+        ]),
+        expected.clone(),
+    );
+    let f = SettingsForm::new(vec![
+        ControlSection::new("section", "Section").control(control.clone()),
+    ]);
+    assert!(validate_form(&f).is_ok());
+    let value = ControlValue::MultiSelect(expected.clone());
+    assert!(control.kind.accepts(&value));
+    let saved = ControlValues::settings_with(&f, |_| Some(value.canonical()));
+    assert!(saved.issues().is_empty());
+    assert_eq!(saved.multi_select("tags").unwrap(), expected);
+    let cap = SearchCapabilities {
+        flags: 0,
+        sort: None,
+        sections: f.sections,
+    };
+    let dense = cap.filter_items(&HashMap::from([("tags".into(), value)]));
+    let effective = ControlValues::search(&cap, &dense).unwrap();
+    assert_eq!(effective.multi_select("tags").unwrap(), expected);
+}

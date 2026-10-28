@@ -192,7 +192,6 @@ fn visible<'a>(
                         .any(|s| s == if *v { "true" } else { "false" }),
                     Some(ControlValue::Select(Some(v))) => cond.any_of.contains(v),
                     Some(ControlValue::MultiSelect(v)) => v.iter().any(|v| cond.any_of.contains(v)),
-                    None => true,
                     _ => false,
                 })
         })
@@ -223,12 +222,12 @@ impl SearchCapabilities {
             .collect()
     }
     pub fn visible_control_ids(&self, values: &HashMap<String, ControlValue>) -> HashSet<String> {
-        visible(
-            self.sort
-                .iter()
-                .chain(self.sections.iter().flat_map(|s| &s.controls)),
-            values,
-        )
+        let all: Vec<_> = self
+            .sort
+            .iter()
+            .chain(self.sections.iter().flat_map(|s| &s.controls))
+            .collect();
+        visible(all.iter().copied(), &effective_values(&all, values))
     }
     /// Builds dense transport in document order, including defaults for hidden controls.
     pub fn filter_items(&self, values: &HashMap<String, ControlValue>) -> Vec<FilterItem> {
@@ -237,17 +236,7 @@ impl SearchCapabilities {
             .iter()
             .chain(self.sections.iter().flat_map(|s| &s.controls))
             .collect();
-        let effective: HashMap<_, _> = all
-            .iter()
-            .filter_map(|c| {
-                values
-                    .get(&c.id)
-                    .filter(|v| c.kind.accepts(v))
-                    .cloned()
-                    .or_else(|| c.kind.default_value())
-                    .map(|v| (c.id.clone(), v))
-            })
-            .collect();
+        let effective = effective_values(&all, values);
         let shown = visible(all.iter().copied(), &effective);
         all.into_iter()
             .filter_map(|c| {
@@ -262,6 +251,22 @@ impl SearchCapabilities {
             })
             .collect()
     }
+}
+fn effective_values(
+    controls: &[&Control],
+    values: &HashMap<String, ControlValue>,
+) -> HashMap<String, ControlValue> {
+    controls
+        .iter()
+        .filter_map(|c| {
+            values
+                .get(&c.id)
+                .filter(|v| c.kind.accepts(v))
+                .cloned()
+                .or_else(|| c.kind.default_value())
+                .map(|v| (c.id.clone(), v))
+        })
+        .collect()
 }
 /// Writes a checked canonical plain setting. Credentials must use the host secret API.
 pub fn write_setting(control: &Control, value: &ControlValue) -> crate::Result<()> {

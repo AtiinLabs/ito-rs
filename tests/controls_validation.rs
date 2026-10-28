@@ -210,9 +210,9 @@ fn option_fields_and_duplicate_values_are_checked_in_field_order() {
         validate_form(&make(vec![ChoiceOption::new("a", "A").grouped("\t")])),
         Rule::CharsText,
     );
-    assert!(
-        validate_form(&make(vec![ChoiceOption::new("\u{85}", "A")])).is_ok(),
-        "value characters intentionally allow C1"
+    rule(
+        validate_form(&make(vec![ChoiceOption::new("\u{85}", "A")])),
+        Rule::CharsValue,
     );
 }
 #[test]
@@ -633,4 +633,24 @@ fn host_query_and_values_requests_use_byte_limits_and_exact_counts() {
     let error = validate_request(&r).unwrap_err();
     assert_eq!(error.rule, Rule::RequestInvalid);
     assert_eq!(error.id, None);
+}
+
+#[test]
+fn declared_option_values_and_requests_reject_every_c0_c1_character() {
+    for code in (0..=31).chain(127..=159) {
+        let value = format!("a{}", char::from_u32(code).unwrap());
+        let control = Control::select(
+            "choice",
+            "Choice",
+            OptionSource::inline(vec![ChoiceOption::new(&value, "Label")]),
+            None,
+        );
+        rule(validate_form(&form(control)), Rule::CharsValue);
+        let request = OptionRequest {
+            catalog: "tags".into(),
+            query: OptionQuery::Values(vec![value]),
+            limit: 1,
+        };
+        rule(validate_request(&request), Rule::RequestInvalid);
+    }
 }
