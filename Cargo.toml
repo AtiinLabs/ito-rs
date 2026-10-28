@@ -1,6 +1,6 @@
 [package]
 name = "ito-rs"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 
 [dependencies]
@@ -21,3 +21,4 @@ overflow-checks = true
 
 [dev-dependencies]
 hex = "0.4.3"
+serde_json = "1"

@@ -150,6 +150,7 @@ pub struct Listing {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+/// A value carried by a search filter. Rich controls use canonical strings in `String`.
 #[non_exhaustive]
 pub enum FilterValue {
     Boolean(bool),
@@ -158,11 +159,14 @@ pub enum FilterValue {
     String(String),
 }
 
-/// A search filter value. Reserved: hosts currently always send an empty filter list.
+/// A named search control value. Rich-capable hosts send dense canonical-string filters.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FilterItem {
+    /// Rich-control kind wire name, or the caller's existing filter type.
     pub type_name: String, // swift `type`
+    /// Stable id of the search control.
     pub name: String,
+    /// Canonical rich-control value or an existing filter value.
     pub value: FilterValue,
 }
 
@@ -306,8 +310,14 @@ mod tests {
             b"\x01\x05probe\x04Test\x01\x02Hi"
         );
         let issues = vec![
-            SettingIssue { key: "url".into(), message: "Missing".into() },
-            SettingIssue { key: String::new(), message: "Setup".into() },
+            SettingIssue {
+                key: "url".into(),
+                message: "Missing".into(),
+            },
+            SettingIssue {
+                key: String::new(),
+                message: "Setup".into(),
+            },
         ];
         assert_eq!(
             postcard::to_allocvec(&issues).unwrap(),
@@ -325,7 +335,10 @@ mod tests {
         assert_eq!(postcard::to_allocvec(&ContentKind::Images).unwrap(), [0]);
         assert_eq!(postcard::to_allocvec(&ContentKind::Text).unwrap(), [2]);
         assert!(postcard::from_bytes::<ContentKind>(&[4]).is_err());
-        assert_eq!(MediaKind::mask(&[MediaKind::Novel, MediaKind::Manga]), 0b101);
+        assert_eq!(
+            MediaKind::mask(&[MediaKind::Novel, MediaKind::Manga]),
+            0b101
+        );
 
         let chapter = Chapter {
             key: "k".into(),
@@ -340,7 +353,10 @@ mod tests {
             kind: ContentKind::Text,
         };
         // Key, eight absent options, then the kind last.
-        assert_eq!(postcard::to_allocvec(&chapter).unwrap(), [1, b'k', 0, 0, 0, 0, 0, 0, 0, 0, 2]);
+        assert_eq!(
+            postcard::to_allocvec(&chapter).unwrap(),
+            [1, b'k', 0, 0, 0, 0, 0, 0, 0, 0, 2]
+        );
     }
 
     #[test]
@@ -367,9 +383,21 @@ mod tests {
 
         let index = |value: HomeComponentValue| postcard::to_allocvec(&value).unwrap()[0];
         assert_eq!(index(HomeComponentValue::Links(Vec::new())), 13);
-        assert_eq!(index(HomeComponentValue::MediaScroller(vec![MediaEntry::Novel(novel)], None)), 14);
-        assert_eq!(index(HomeComponentValue::MediaList(false, None, Vec::new(), None)), 15);
-        assert_eq!(index(HomeComponentValue::MediaBigScroller(Vec::new(), None)), 16);
+        assert_eq!(
+            index(HomeComponentValue::MediaScroller(
+                vec![MediaEntry::Novel(novel)],
+                None
+            )),
+            14
+        );
+        assert_eq!(
+            index(HomeComponentValue::MediaList(false, None, Vec::new(), None)),
+            15
+        );
+        assert_eq!(
+            index(HomeComponentValue::MediaBigScroller(Vec::new(), None)),
+            16
+        );
     }
 
     // Hosts decode settings by postcard variant index, so existing variants must keep
@@ -378,8 +406,18 @@ mod tests {
     fn setting_variants_keep_their_wire_indices() {
         let schema = SettingsSchema {
             settings: vec![
-                Setting::Toggle { id: "t".into(), name: "T".into(), summary: None, default_value: true },
-                Setting::Text { id: "x".into(), name: "X".into(), summary: None, default_value: String::new() },
+                Setting::Toggle {
+                    id: "t".into(),
+                    name: "T".into(),
+                    summary: None,
+                    default_value: true,
+                },
+                Setting::Text {
+                    id: "x".into(),
+                    name: "X".into(),
+                    summary: None,
+                    default_value: String::new(),
+                },
                 Setting::Picker {
                     id: "p".into(),
                     name: "P".into(),
@@ -387,7 +425,11 @@ mod tests {
                     options: vec!["a".into()],
                     default_value: "a".into(),
                 },
-                Setting::Secret { id: "s".into(), name: "S".into(), summary: Some("hint".into()) },
+                Setting::Secret {
+                    id: "s".into(),
+                    name: "S".into(),
+                    summary: Some("hint".into()),
+                },
             ],
         };
         let bytes = postcard::to_allocvec(&schema).unwrap();

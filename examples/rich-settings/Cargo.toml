@@ -1,0 +1,10 @@
+[package]
+name = "ito-rich-settings-example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ito-rs = { path = "../.." }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
