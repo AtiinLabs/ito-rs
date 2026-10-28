@@ -64,7 +64,7 @@ impl SourceProvider for Example {
                     && (selected_tags.is_empty() || selected_tags.contains(&tag_id))
             })
             .collect::<Vec<_>>();
-        if sort == "title" {
+        if sort == "title" || sort == "\u{00e9}" {
             matching.sort_unstable();
         } else {
             matching.sort_unstable_by(|left, right| right.cmp(left));
@@ -227,6 +227,8 @@ impl SourceProvider for Example {
                 OptionSource::inline(vec![
                     ChoiceOption::new("popular", "Popular"),
                     ChoiceOption::new("title", "Title"),
+                    ChoiceOption::new("\u{00e9}", "Oldest first"),
+                    ChoiceOption::new("e\u{0301}", "Newest first"),
                 ]),
                 Some("popular".into()),
             )),
@@ -476,6 +478,32 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert!(titles.windows(2).all(|pair| pair[0] <= pair[1]));
+    }
+
+    #[test]
+    fn byte_distinct_sort_values_choose_different_orders() {
+        let search = |sort: &str| {
+            Example::search(
+                "",
+                1,
+                None,
+                vec![
+                    FilterItem {
+                        type_name: "select".into(),
+                        name: "sort".into(),
+                        value: FilterValue::String(sort.into()),
+                    },
+                    FilterItem {
+                        type_name: "toggle".into(),
+                        name: "adult".into(),
+                        value: FilterValue::String("true".into()),
+                    },
+                ],
+            )
+            .expect("ordered catalog")
+        };
+        assert_eq!(search("\u{00e9}").entries[0].key(), "example-0");
+        assert_eq!(search("e\u{0301}").entries[0].key(), "example-99");
     }
     #[test]
     fn listing_is_populated_and_media_updates_validate_keys() {
