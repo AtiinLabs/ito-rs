@@ -6,7 +6,17 @@ use serde::Serialize;
 /// Packs an export result with the standard allocation protocol (also used by settings diagnostics).
 #[doc(hidden)]
 pub fn __pack_result<T: Serialize>(export: &str, result: Result<T>) -> i64 {
-    let bytes = match result.and_then(|value| postcard::to_allocvec(&value).map_err(crate::Error::from)) {
+    __pack_encoded(
+        export,
+        result.and_then(|value| postcard::to_allocvec(&value).map_err(crate::Error::from)),
+    )
+}
+
+/// Packs already encoded bytes, or reports the failure. Unlike `__pack_bytes`, an unsupported
+/// export is reported as such.
+#[doc(hidden)]
+pub fn __pack_encoded(export: &str, result: Result<Vec<u8>>) -> i64 {
+    let bytes = match result {
         Ok(bytes) => bytes.into_boxed_slice(),
         Err(error) => {
             crate::error::__report_failure(export, &error);

@@ -1,10 +1,14 @@
 //! Source-provider SDK for Ito plugins.
 //!
-//! Version 0.7 adds optional rich settings, paged option catalogs and search capabilities
-//! through [`controls`], while keeping ABI 2 and all existing wire layouts unchanged.
+//! Version 0.8 is ABI 3: chapters carry `f64` numbers, a scanlator with an optional stable
+//! identifier, and optional `logical_unit_id`, `reading_order` and `revision` fields, and
+//! manga and novel entries describe what their chapter list covers with a `ChapterCatalog`.
+//! Plugins built for ABI 1 or 2 must be ported; see `docs/ABI3-MIGRATION.md`. Rich settings,
+//! paged option catalogs and search capabilities (see [`controls`]) are unchanged.
 //! Providers may retain legacy settings for older hosts; the rich-control exports opt out
 //! with [`Error::Unsupported`] unless implemented.
 
+pub mod catalog;
 pub mod controls;
 
 #[doc(hidden)]
@@ -37,7 +41,13 @@ pub use postcard;
 ///
 /// Version 2: entries carry a `MediaKind` and chapters a `ContentKind`; plugins export
 /// `ito_supported_kinds` and one kind-neutral set of exports (see `provider`).
-pub const ABI_VERSION: u32 = 2;
+///
+/// Version 3: `Chapter` numbers are `f64`, its scanlator is an optional `Scanlator` (stable
+/// identifier plus display name) and it gains `logical_unit_id`, `reading_order` and
+/// `revision`; `Manga` and `Novel` gain an optional `ChapterCatalog`. Export signatures are
+/// unchanged. Hosts supporting ABI 3 refuse older plugins, and the SDK validates returned
+/// chapter lists against the limits in [`catalog`].
+pub const ABI_VERSION: u32 = 3;
 
 /// Exports `ito_abi_version`. Used by the `export_*_plugin!` macros.
 #[doc(hidden)]

@@ -25,6 +25,10 @@ pub enum Error {
     /// The service needs the user to sign in on its website. Hosts offer a sign-in page for the
     /// plugin's manifest `url`; cookies from that sign-in are sent on later requests.
     NeedsLogin(String),
+    /// A response broke the data contract (see [`crate::catalog`]): `code` is the fixed rule
+    /// code, such as `duplicate.key`, and never contains plugin text. The SDK raises it before
+    /// encoding a response; hosts read it as `ErrorCategory::ContractViolation`.
+    Contract { export: String, code: &'static str },
 }
 
 impl fmt::Display for Error {
@@ -41,6 +45,7 @@ impl fmt::Display for Error {
             | Error::Server(msg)
             | Error::NotFound(msg)
             | Error::NeedsLogin(msg) => write!(f, "{}", msg),
+            Error::Contract { code, .. } => write!(f, "contract violation: {}", code),
         }
     }
 }
@@ -78,6 +83,10 @@ pub enum ErrorCategory {
     /// The user must sign in on the service's website. Hosts before ito-runner `needsLogin`
     /// support can't decode it: return it only once the plugin's minimum app version has it.
     NeedsLogin = 7,
+    /// The plugin's response broke the data contract; the report's message is the fixed rule
+    /// code (see [`crate::catalog::Rule::code`]), such as `duplicate.key`. Hosts without
+    /// support can't decode it, so only ABI 3 hosts, which know it, load these plugins.
+    ContractViolation = 8,
 }
 
 /// A failure as hosts read it from `ito_last_error`.
@@ -89,6 +98,7 @@ pub struct ErrorReport {
 
 /// Version 2 distinguishes Unsupported from a refusal whose message happens to say
 /// "Unsupported operation". Hosts before this export use the legacy message convention.
+/// New error categories are gated by the plugin ABI or the minimum app version, not by this number.
 pub const ERROR_PROTOCOL_VERSION: u32 = 2;
 
 impl Error {
@@ -100,6 +110,7 @@ impl Error {
             Error::Server(_) => ErrorCategory::Server,
             Error::NotFound(_) => ErrorCategory::NotFound,
             Error::NeedsLogin(_) => ErrorCategory::NeedsLogin,
+            Error::Contract { .. } => ErrorCategory::ContractViolation,
             Error::Unsupported => ErrorCategory::Unsupported,
             Error::Html(_) | Error::Postcard(_) | Error::Utf8(_) | Error::Host(_) => {
                 ErrorCategory::Other
@@ -118,6 +129,7 @@ impl Error {
             | Error::Server(msg)
             | Error::NotFound(msg)
             | Error::NeedsLogin(msg) => msg.clone(),
+            Error::Contract { code, .. } => (*code).to_string(),
             _ => self.to_string(),
         }
     }
@@ -203,6 +215,7 @@ mod tests {
             (Error::Unauthorized("Unsupported operation".into()), ErrorCategory::Unauthorized, "Unsupported operation"),
             (Error::NeedsLogin("Sign in to read".into()), ErrorCategory::NeedsLogin, "Sign in to read"),
             (Error::Unsupported, ErrorCategory::Unsupported, "Unsupported operation"),
+            (Error::Contract { export: "search".into(), code: "length.key" }, ErrorCategory::ContractViolation, "length.key"),
         ];
         for (error, category, message) in cases {
             assert_eq!(error.report(), ErrorReport { category, message: message.into() });
@@ -222,5 +235,9 @@ mod tests {
         assert_eq!(bytes[0], 12);
         let bytes = postcard::to_allocvec(&Error::NeedsLogin("x".into()).report()).unwrap_or_default();
         assert_eq!(bytes[0], 14);
+        // Category 8 travels as the zigzag varint 16, then the fixed rule code.
+        let contract = Error::Contract { export: "get_media_update".into(), code: "duplicate.key" };
+        let bytes = postcard::to_allocvec(&contract.report()).unwrap_or_default();
+        assert_eq!(bytes, [&[16, 13][..], b"duplicate.key"].concat());
     }
 }

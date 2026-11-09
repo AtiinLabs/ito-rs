@@ -5,7 +5,7 @@
 //! `NovelProvider` and call the matching `export_*_plugin!`; it is exported through the same
 //! `SourceProvider` interface.
 //!
-//! Every plugin exports (ABI 2), besides the allocator, `ito_last_error`, the image and settings
+//! Every plugin exports (ABI 3), besides the allocator, `ito_last_error`, the image and settings
 //! diagnostics exports:
 //! - `ito_abi_version() -> u32` and `ito_supported_kinds() -> u32` (a `MediaKind::mask`);
 //! - `get_home`, `get_settings`, `handle_url(url)`, `handle_image(url)`;
@@ -740,7 +740,7 @@ macro_rules! export_plugin {
 
         #[unsafe(no_mangle)]
         pub extern "C" fn get_home() -> i64 {
-            $crate::image::__pack_result(
+            $crate::export::__pack_home(
                 "get_home",
                 <$type as $crate::provider::SourceProvider>::get_home(),
             )
@@ -757,7 +757,7 @@ macro_rules! export_plugin {
         #[unsafe(no_mangle)]
         pub extern "C" fn handle_url(url_ptr: i32, url_len: i32) -> i64 {
             let url = $crate::export::__text(unsafe { $crate::export::__bytes(url_ptr, url_len) });
-            $crate::image::__pack_result(
+            $crate::export::__pack_link(
                 "handle_url",
                 <$type as $crate::provider::SourceProvider>::handle_url(url.as_ref()),
             )
@@ -775,7 +775,7 @@ macro_rules! export_plugin {
         #[unsafe(no_mangle)]
         pub extern "C" fn get_listing(listing_ptr: i32, listing_len: i32, page: i32) -> i64 {
             let listing = unsafe { $crate::export::__bytes(listing_ptr, listing_len) };
-            $crate::image::__pack_result(
+            $crate::export::__pack_page(
                 "get_listing",
                 $crate::export::__listing::<$type>(listing, page),
             )
@@ -792,7 +792,7 @@ macro_rules! export_plugin {
         ) -> i64 {
             let query = unsafe { $crate::export::__bytes(query_ptr, query_len) };
             let filters = unsafe { $crate::export::__bytes(filters_ptr, filters_len) };
-            $crate::image::__pack_result(
+            $crate::export::__pack_page(
                 "search",
                 $crate::export::__search::<$type>(query, page, kind, filters),
             )
@@ -806,7 +806,7 @@ macro_rules! export_plugin {
             needs_units: i32,
         ) -> i64 {
             let entry = unsafe { $crate::export::__bytes(entry_ptr, entry_len) };
-            $crate::image::__pack_result(
+            $crate::export::__pack_entry(
                 "get_media_update",
                 $crate::export::__media_update::<$type>(entry, needs_details, needs_units),
             )
@@ -896,22 +896,12 @@ mod tests {
             nsfw: 0,
             viewer: Viewer::Default,
             chapters: None,
+            catalog: None,
         }
     }
 
     fn chapter(kind: ContentKind) -> Chapter {
-        Chapter {
-            key: "c1".into(),
-            title: None,
-            volume: None,
-            chapter: None,
-            date_updated: None,
-            scanlator: None,
-            url: None,
-            lang: None,
-            paywalled: None,
-            kind,
-        }
+        Chapter::new("c1", kind)
     }
 
     struct Shelf;
@@ -1023,6 +1013,7 @@ mod tests {
             content_rating: novel::ContentRating::Safe,
             nsfw: 0,
             chapters: None,
+            catalog: None,
         };
         assert!(matches!(
             Source::get_media_update(MediaEntry::Novel(novel.clone()), true, true),
@@ -1178,6 +1169,7 @@ mod tests {
             content_rating: novel::ContentRating::Safe,
             nsfw: 0,
             chapters: None,
+            catalog: None,
         };
         Source::get_chapter_pages(MediaEntry::Novel(novel), chapter(ContentKind::Text)).unwrap();
         assert!(matches!(
