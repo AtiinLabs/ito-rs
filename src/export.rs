@@ -3,7 +3,7 @@
 //! `dealloc`. The macro only turns pointers into slices; the rest lives here.
 
 use crate::models::{
-    anime::Video, Chapter, MediaEntry, MediaKind, MediaPageResult, Page,
+    anime::Video, Chapter, HomeLayout, LinkValue, MediaEntry, MediaKind, MediaPageResult, Page,
 };
 use crate::provider::SourceProvider;
 use crate::{Error, Result};
@@ -53,6 +53,77 @@ pub fn __pack_bytes(export: &str, result: Result<Vec<u8>>) -> i64 {
     }
 }
 
+/// Encodes a response after checking it against the catalog contract, so a plugin returning an
+/// inconsistent chapter list fails with a fixed code instead of reaching the host. `max_bytes`
+/// bounds the encoded size where the contract sets one.
+#[doc(hidden)]
+pub fn __encode_checked<T: serde::Serialize>(
+    export: &str,
+    result: Result<T>,
+    validate: fn(&T) -> std::result::Result<(), crate::catalog::Violation>,
+    max_bytes: Option<usize>,
+) -> Result<Vec<u8>> {
+    let value = result?;
+    let invalid = |violation: crate::catalog::Violation| Error::Contract {
+        export: export.to_owned(),
+        code: violation.rule.code(),
+    };
+    validate(&value).map_err(invalid)?;
+    let bytes = postcard::to_allocvec(&value)?;
+    if max_bytes.is_some_and(|max| bytes.len() > max) {
+        return Err(invalid(crate::catalog::Violation::new(
+            crate::catalog::Rule::ResponseTooLarge,
+        )));
+    }
+    Ok(bytes)
+}
+
+/// Packs a `get_home` response.
+#[doc(hidden)]
+pub fn __pack_home(export: &str, result: Result<HomeLayout>) -> i64 {
+    crate::image::__pack_encoded(
+        export,
+        __encode_checked(export, result, crate::catalog::validate_home, None),
+    )
+}
+
+/// Packs a `get_listing` or `search` response.
+#[doc(hidden)]
+pub fn __pack_page(export: &str, result: Result<MediaPageResult>) -> i64 {
+    crate::image::__pack_encoded(
+        export,
+        __encode_checked(export, result, crate::catalog::validate_page_result, None),
+    )
+}
+
+/// Packs a `get_media_update` response.
+#[doc(hidden)]
+pub fn __pack_entry(export: &str, result: Result<MediaEntry>) -> i64 {
+    crate::image::__pack_encoded(
+        export,
+        __encode_checked(
+            export,
+            result,
+            crate::catalog::validate_entry,
+            Some(crate::catalog::MAX_RESPONSE_BYTES),
+        ),
+    )
+}
+
+/// Packs a `handle_url` response.
+#[doc(hidden)]
+pub fn __pack_link(export: &str, result: Result<LinkValue>) -> i64 {
+    crate::image::__pack_encoded(
+        export,
+        __encode_checked(
+            export,
+            result,
+            crate::catalog::validate_link,
+            Some(crate::catalog::MAX_RESPONSE_BYTES),
+        ),
+    )
+}
+
 /// A host's `MediaKind` argument.
 #[doc(hidden)]
 pub fn __media_kind(value: i32) -> Result<MediaKind> {
@@ -93,7 +164,14 @@ pub fn __media_update<T: SourceProvider>(
     needs_details: i32,
     needs_units: i32,
 ) -> Result<MediaEntry> {
-    T::get_media_update(__decode(entry)?, needs_details != 0, needs_units != 0)
+    let mut entry: MediaEntry = __decode(entry)?;
+    // The host's saved catalog describes a list the plugin is about to replace.
+    match &mut entry {
+        MediaEntry::Manga(manga) => manga.catalog = None,
+        MediaEntry::Novel(novel) => novel.catalog = None,
+        MediaEntry::Anime(_) => {}
+    }
+    T::get_media_update(entry, needs_details != 0, needs_units != 0)
 }
 
 #[doc(hidden)]
@@ -183,6 +261,7 @@ mod tests {
             nsfw: 0,
             viewer: Viewer::Default,
             chapters: None,
+            catalog: None,
         })
     }
 
@@ -201,7 +280,7 @@ mod tests {
     #[test]
     fn exported_kinds_and_abi_are_what_hosts_read() {
         assert_eq!(ito_supported_kinds(), 0b111);
-        assert_eq!(crate::ABI_VERSION, 2);
+        assert_eq!(crate::ABI_VERSION, 3);
     }
 
     #[test]
@@ -211,19 +290,7 @@ mod tests {
         let listing = postcard::to_allocvec(&Listing { id: "top".into(), name: "Top".into(), kind: 0 }).unwrap();
         __listing::<Everything>(&listing, 3).unwrap();
         let entry = postcard::to_allocvec(&manga()).unwrap();
-        let chapter = postcard::to_allocvec(&Chapter {
-            key: "c".into(),
-            title: None,
-            volume: None,
-            chapter: None,
-            date_updated: None,
-            scanlator: None,
-            url: None,
-            lang: None,
-            paywalled: None,
-            kind: ContentKind::Text,
-        })
-        .unwrap();
+        let chapter = postcard::to_allocvec(&Chapter::new("c", ContentKind::Text)).unwrap();
         __chapter_pages::<Everything>(&entry, &chapter).unwrap();
         assert_eq!(seen(), ["search q None", "search 七 Some(Novel)", "listing top 3", "pages s Text"]);
 
@@ -233,9 +300,9 @@ mod tests {
 
     #[test]
     fn a_rejected_argument_is_reported_to_the_host_once() {
-        // An ABI 1 chapter has no kind, so an ABI 2 plugin can't read it.
+        // An ABI 2 chapter lacks the three ABI 3 trailing fields, so an ABI 3 plugin can't read it.
         let entry = postcard::to_allocvec(&manga()).unwrap();
-        let legacy_chapter = [1, b'c', 0, 0, 0, 0, 0, 0, 0, 0];
+        let legacy_chapter = [1, b'c', 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let failure = __chapter_pages::<Everything>(&entry, &legacy_chapter).unwrap_err();
         assert_eq!(crate::image::__pack_result::<Vec<Page>>("get_chapter_pages", Err(failure)), 0);
         assert_eq!(last_report().unwrap().category, ErrorCategory::Other);
@@ -278,5 +345,95 @@ mod tests {
         let unsupported = __episode_videos::<Everything>(&anime, &episode).unwrap_err();
         assert_eq!(crate::image::__pack_result::<Vec<Video>>("get_episode_videos", Err(unsupported)), 0);
         assert_eq!(last_report().unwrap().category, ErrorCategory::Unsupported);
+    }
+
+    fn entry_with_chapters(chapters: Vec<Chapter>) -> MediaEntry {
+        let MediaEntry::Manga(mut manga) = manga() else {
+            unreachable!()
+        };
+        manga.chapters = Some(chapters);
+        MediaEntry::Manga(manga)
+    }
+
+    #[test]
+    fn a_contract_violation_in_a_response_is_reported_with_its_fixed_code() {
+        let duplicated = vec![
+            Chapter::new("c", ContentKind::Text),
+            Chapter::new("c", ContentKind::Text),
+        ];
+        let invalid = entry_with_chapters(duplicated.clone());
+        assert_eq!(__pack_entry("get_media_update", Ok(invalid)), 0);
+        let report = last_report().unwrap();
+        assert_eq!(report.category, ErrorCategory::ContractViolation);
+        assert_eq!(report.message, "duplicate.key");
+
+        let page = MediaPageResult {
+            entries: vec![entry_with_chapters(duplicated)],
+            has_next_page: false,
+        };
+        assert_eq!(__pack_page("search", Ok(page)), 0);
+        assert_eq!(last_report().unwrap().message, "duplicate.key");
+
+        let valid = entry_with_chapters(vec![Chapter::new("c", ContentKind::Text)]);
+        assert_ne!(__pack_entry("get_media_update", Ok(valid)), 0);
+        assert!(last_report().is_none());
+    }
+
+    #[test]
+    fn an_oversized_response_is_refused_and_unsupported_is_still_reported() {
+        let entry = entry_with_chapters(vec![Chapter::new("c", ContentKind::Text)]);
+        let encoded = postcard::to_allocvec(&entry).unwrap();
+        let check = |max| {
+            let validate = crate::catalog::validate_entry;
+            __encode_checked("get_media_update", Ok(entry.clone()), validate, max)
+        };
+        assert_eq!(check(Some(encoded.len())).unwrap(), encoded);
+        let refused = check(Some(encoded.len() - 1)).unwrap_err();
+        assert_eq!(refused.message(), "response.too_large");
+
+        assert_eq!(__pack_entry("get_media_update", Err(Error::Unsupported)), 0);
+        assert_eq!(last_report().unwrap().category, ErrorCategory::Unsupported);
+    }
+
+    #[test]
+    fn the_entry_a_plugin_receives_never_carries_a_catalog() {
+        let catalog = Some(crate::models::ChapterCatalog {
+            scope: crate::models::CatalogScope::AllEligible,
+            completeness: crate::models::CatalogCompleteness::Complete,
+        });
+        let chapters = vec![Chapter::new("c", ContentKind::Text)];
+        let MediaEntry::Manga(mut stale) = entry_with_chapters(chapters.clone()) else {
+            unreachable!()
+        };
+        stale.catalog = catalog;
+        let bytes = postcard::to_allocvec(&MediaEntry::Manga(stale)).unwrap();
+        let MediaEntry::Manga(received) = __media_update::<Everything>(&bytes, 1, 1).unwrap()
+        else {
+            unreachable!()
+        };
+        assert!(received.catalog.is_none());
+        assert_eq!(received.chapters.unwrap().len(), 1);
+
+        let novel = MediaEntry::Novel(crate::models::novel::Novel {
+            key: "n".into(),
+            title: "N".into(),
+            authors: None,
+            artist: None,
+            description: None,
+            tags: None,
+            cover: None,
+            url: None,
+            status: crate::models::novel::Status::Unknown,
+            content_rating: crate::models::novel::ContentRating::Safe,
+            nsfw: 0,
+            chapters: Some(chapters),
+            catalog,
+        });
+        let bytes = postcard::to_allocvec(&novel).unwrap();
+        let MediaEntry::Novel(received) = __media_update::<Everything>(&bytes, 1, 1).unwrap()
+        else {
+            unreachable!()
+        };
+        assert!(received.catalog.is_none());
     }
 }

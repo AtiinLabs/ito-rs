@@ -388,6 +388,7 @@ fn sample_entry(index: u32) -> MediaEntry {
         nsfw: if is_adult { 1 } else { 0 },
         viewer: Viewer::Default,
         chapters: None,
+        catalog: None,
     })
 }
 

@@ -29,7 +29,7 @@ pub enum Viewer {
     Webtoon = 4,
 }
 
-pub use super::Chapter;
+pub use super::{Chapter, ChapterCatalog};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Manga {
@@ -46,6 +46,10 @@ pub struct Manga {
     pub nsfw: i32,
     pub viewer: Viewer,
     pub chapters: Option<Vec<Chapter>>,
+    /// What `chapters` covers. `None` means unknown, and it must be `None` when `chapters` is.
+    /// Set it whenever you set `chapters`; the entry passed to `get_media_update` never
+    /// carries a catalog.
+    pub catalog: Option<ChapterCatalog>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

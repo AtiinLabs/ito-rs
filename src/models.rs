@@ -37,20 +37,140 @@ pub enum ContentKind {
     Text = 1,
 }
 
-/// A chapter of a manga or novel.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/// The scanlation group that uploaded a chapter.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Scanlator {
+    /// A stable identifier of the group within this source, when the source has one. `None`
+    /// means unknown; never invent an identifier from the display name.
+    pub id: Option<String>,
+    /// The group's display name. Renaming a group never renames the upload it made.
+    pub name: String,
+}
+
+impl Scanlator {
+    /// A group known only by its display name.
+    pub fn named(name: impl Into<String>) -> Self {
+        Scanlator {
+            id: None,
+            name: name.into(),
+        }
+    }
+
+    /// A group with a stable source-scoped identifier.
+    pub fn with_id(id: impl Into<String>, name: impl Into<String>) -> Self {
+        Scanlator {
+            id: Some(id.into()),
+            name: name.into(),
+        }
+    }
+}
+
+/// A chapter of a manga or novel: one exact upload.
+///
+/// Build it with [`Chapter::new`] and functional update syntax, so a field added by a later
+/// release is a recompile and not a source edit:
+/// `Chapter { title, chapter, ..Chapter::new(key, kind) }`.
+///
+/// Limits (see [`crate::catalog`]): numbers are finite and bounded in magnitude; strings are
+/// bounded and compared as exact UTF-8 bytes; keys are unique within one chapter list.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Chapter {
+    /// The stable identifier of this exact upload within its entry, used to fetch its pages and
+    /// to remember reading and downloads. It is not a content hash and is not unique across
+    /// sources or entries.
     pub key: String,
     pub title: Option<String>,
-    pub volume: Option<f32>,
-    pub chapter: Option<f32>,
+    /// Display and ordering number of the volume. Equal numbers never prove two chapters are
+    /// the same reading position.
+    pub volume: Option<f64>,
+    /// Display and ordering number of the chapter. Equal numbers never prove two chapters are
+    /// the same reading position.
+    pub chapter: Option<f64>,
+    /// When the upload was published, in seconds since 1970-01-01 UTC. Finite and at most
+    /// 1e11 in magnitude.
     pub date_updated: Option<f64>,
-    pub scanlator: Option<String>,
+    pub scanlator: Option<Scanlator>,
     pub url: Option<String>,
+    /// The language of this upload, independent of the scanlator.
     pub lang: Option<String>,
+    /// Locked for the signed-in account or session. `None` means unknown.
     pub paywalled: Option<bool>,
     /// Chosen per chapter, so one series can mix page volumes with text volumes.
     pub kind: ContentKind,
+    /// Identifies the reading position this upload belongs to: every upload of one entry that
+    /// the source itself declares to be the same position carries the same id. The id is scoped
+    /// to the entry, stays stable across refreshes, and is never reused for a different
+    /// position. Emit it only with credible source-side evidence: the same number, title,
+    /// volume, scanlator or date alone is not enough. `None` means unknown.
+    pub logical_unit_id: Option<String>,
+    /// Orders reading positions within one response: lower values are read earlier, values are
+    /// comparable only with others in the same response, and gaps are allowed. Equal values
+    /// mean the same reading position (for example alternative uploads of one chapter). It is
+    /// an ordering hint for unnumbered or irregular releases, independent of the order of the
+    /// list, and not a durable identity.
+    pub reading_order: Option<i64>,
+    /// A token that changes exactly when this upload's content changes. Set it only when the
+    /// source provides one tied to the content; never use a timestamp. When present it is not
+    /// empty. `None` means unknown.
+    pub revision: Option<String>,
+}
+
+impl Chapter {
+    /// A chapter with only its required fields; every optional field is unknown.
+    pub fn new(key: impl Into<String>, kind: ContentKind) -> Self {
+        Chapter {
+            key: key.into(),
+            title: None,
+            volume: None,
+            chapter: None,
+            date_updated: None,
+            scanlator: None,
+            url: None,
+            lang: None,
+            paywalled: None,
+            kind,
+            logical_unit_id: None,
+            reading_order: None,
+            revision: None,
+        }
+    }
+}
+
+/// Which chapters a returned list covers. Encoded like the other model enums, as an i32
+/// discriminant; the values are the wire format.
+///
+/// Evolution rule: a discriminant a reader does not know decodes to `Unknown`, so a later
+/// release can add scopes without a new ABI.
+#[derive(Serialize_repr, Deserialize_repr, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
+pub enum CatalogScope {
+    #[serde(other)]
+    Unknown = 0,
+    /// What the source shows by default, which may collapse alternative uploads.
+    Visible = 1,
+    /// Every eligible alternative upload is listed.
+    AllEligible = 2,
+}
+
+/// Whether a chapter list holds everything within its [`CatalogScope`], for the signed-in
+/// account and the source settings in effect. A discriminant a reader does not know decodes to
+/// `Unknown`, like [`CatalogScope`].
+#[derive(Serialize_repr, Deserialize_repr, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(i32)]
+pub enum CatalogCompleteness {
+    #[serde(other)]
+    Unknown = 0,
+    Partial = 1,
+    Complete = 2,
+}
+
+/// What an entry's chapter list covers. An entry without one has an unknown scope and
+/// completeness. A catalog requires the entry's `chapters` to be present: set it whenever you
+/// set `chapters`. The entry passed to `get_media_update` never carries a catalog.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChapterCatalog {
+    pub scope: CatalogScope,
+    pub completeness: CatalogCompleteness,
 }
 
 /// A catalog entry of any kind.
@@ -340,22 +460,43 @@ mod tests {
             0b101
         );
 
-        let chapter = Chapter {
-            key: "k".into(),
-            title: None,
-            volume: None,
-            chapter: None,
-            date_updated: None,
-            scanlator: None,
-            url: None,
-            lang: None,
-            paywalled: None,
-            kind: ContentKind::Text,
-        };
-        // Key, eight absent options, then the kind last.
+        let chapter = Chapter::new("k", ContentKind::Text);
+        // Key, eight absent options, the kind, then the three ABI 3 options.
         assert_eq!(
             postcard::to_allocvec(&chapter).unwrap(),
-            [1, b'k', 0, 0, 0, 0, 0, 0, 0, 0, 2]
+            [1, b'k', 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0]
+        );
+
+        // f64 numbers are eight little-endian bytes behind a presence byte; the scanlator is an
+        // option of (optional id, name); reading order is a zigzag varint.
+        let chapter = Chapter {
+            chapter: Some(1.5),
+            scanlator: Some(Scanlator::with_id("g", "G")),
+            logical_unit_id: Some("u".into()),
+            reading_order: Some(-1),
+            revision: Some("r".into()),
+            ..Chapter::new("k", ContentKind::Images)
+        };
+        let mut expected = vec![1, b'k', 0, 0, 1];
+        expected.extend_from_slice(&1.5f64.to_le_bytes());
+        expected.extend_from_slice(&[0, 1, 1, 1, b'g', 1, b'G', 0, 0, 0, 0]);
+        expected.extend_from_slice(&[1, 1, b'u', 1, 1, 1, 1, b'r']);
+        assert_eq!(postcard::to_allocvec(&chapter).unwrap(), expected);
+        assert_eq!(postcard::from_bytes::<Chapter>(&expected).unwrap(), chapter);
+
+        // Scope and completeness are i32 discriminants too.
+        let catalog = ChapterCatalog {
+            scope: CatalogScope::AllEligible,
+            completeness: CatalogCompleteness::Partial,
+        };
+        assert_eq!(postcard::to_allocvec(&catalog).unwrap(), [4, 2]);
+        assert_eq!(
+            postcard::from_bytes::<CatalogScope>(&[6]).unwrap(),
+            CatalogScope::Unknown
+        );
+        assert_eq!(
+            postcard::from_bytes::<CatalogCompleteness>(&[6]).unwrap(),
+            CatalogCompleteness::Unknown
         );
     }
 
@@ -374,6 +515,7 @@ mod tests {
             content_rating: novel::ContentRating::Safe,
             nsfw: 0,
             chapters: None,
+            catalog: None,
         };
         let entry = postcard::to_allocvec(&MediaEntry::Novel(novel.clone())).unwrap();
         assert_eq!(entry[0], 2);
