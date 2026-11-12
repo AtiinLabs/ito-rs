@@ -173,6 +173,35 @@ pub struct ChapterCatalog {
     pub completeness: CatalogCompleteness,
 }
 
+/// The request of the optional `get_chapter_editions` export: one page of every alternative
+/// upload of a manga or novel's chapters. See [`crate::editions`] for the rules.
+///
+/// `entry` is the title as the host holds it, with its chapter list and catalog removed before
+/// the source sees it; its key is exact. `cursor` is `None` on the first page and otherwise the
+/// opaque `next_cursor` of the previous page, byte for byte. `limit` is the most chapters the
+/// source may return, 1 to 100.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ChapterEditionsRequest {
+    pub entry: MediaEntry,
+    pub cursor: Option<String>,
+    pub limit: u32,
+}
+
+/// One page of alternative uploads, answering a [`ChapterEditionsRequest`].
+///
+/// Editions are ordinary [`Chapter`] values in the ABI 3 layout. `scope` and `completeness` use
+/// the same enums as [`ChapterCatalog`], but `scope` stays constant through a traversal and
+/// `completeness` does not: every page that carries a `next_cursor` is `Partial`, and the last
+/// page, which has none, may be `Unknown`, `Partial` or `Complete`. `Complete` on the last page
+/// says the traversal covered everything within `scope`, no more.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ChapterEditionsPage {
+    pub editions: Vec<Chapter>,
+    pub next_cursor: Option<String>,
+    pub scope: CatalogScope,
+    pub completeness: CatalogCompleteness,
+}
+
 /// A catalog entry of any kind.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MediaEntry {

@@ -1,4 +1,5 @@
-//! ABI 3 changes payload layouts only: every export keeps the name and signature hosts call.
+//! ABI 3 changes payload layouts only: every export keeps the name and signature hosts call, and
+//! the optional `get_chapter_editions` export adds one more without a version bump.
 //! Assigning each to an explicitly typed function pointer fails to compile on any change.
 
 use ito_rs::{
@@ -65,6 +66,7 @@ fn every_export_keeps_its_name_and_signature() {
     let _: extern "C" fn(i32, i32, i32, i32, i32, i32) -> i64 = search;
     let _: extern "C" fn(i32, i32, i32, i32) -> i64 = get_media_update;
     let _: extern "C" fn(i32, i32, i32, i32) -> i64 = get_chapter_pages;
+    let _: extern "C" fn(i32, i32) -> i64 = get_chapter_editions;
     let _: extern "C" fn(i32, i32, i32, i32) -> i64 = get_episode_videos;
     let _: extern "C" fn(i32, i32, i32, i32, i32) -> i32 = mark_completed;
     let _: extern "C" fn(usize) -> *mut u8 = ito_rs::ffi_alloc::alloc;

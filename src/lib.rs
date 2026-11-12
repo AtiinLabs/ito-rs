@@ -6,10 +6,13 @@
 //! Plugins built for ABI 1 or 2 must be ported; see `docs/ABI3-MIGRATION.md`. Rich settings,
 //! paged option catalogs and search capabilities (see [`controls`]) are unchanged.
 //! Providers may retain legacy settings for older hosts; the rich-control exports opt out
-//! with [`Error::Unsupported`] unless implemented.
+//! with [`Error::Unsupported`] unless implemented. Sources that can list every alternative upload
+//! of a chapter, page by page, may implement the optional `get_chapter_editions` export (see
+//! [`editions`]); it adds no ABI version.
 
 pub mod catalog;
 pub mod controls;
+pub mod editions;
 
 #[doc(hidden)]
 pub mod completion;

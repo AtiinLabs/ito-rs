@@ -3,7 +3,8 @@
 //! `dealloc`. The macro only turns pointers into slices; the rest lives here.
 
 use crate::models::{
-    anime::Video, Chapter, HomeLayout, LinkValue, MediaEntry, MediaKind, MediaPageResult, Page,
+    anime::Video, Chapter, ChapterEditionsRequest, HomeLayout, LinkValue, MediaEntry, MediaKind,
+    MediaPageResult, Page,
 };
 use crate::provider::SourceProvider;
 use crate::{Error, Result};
@@ -189,6 +190,30 @@ pub fn __episode_videos<T: SourceProvider>(anime: &[u8], episode: &[u8]) -> Resu
 #[doc(hidden)]
 pub fn __mark_completed<T: SourceProvider>(kind: i32, media_key: &[u8], unit_key: &[u8]) -> Result<()> {
     T::mark_completed(__media_kind(kind)?, __text(media_key).as_ref(), __text(unit_key).as_ref())
+}
+
+/// Decodes and checks a `get_chapter_editions` request, strips the entry's chapters and catalog,
+/// calls the provider and returns the encoded, validated page. A request that breaks the contract
+/// never reaches the provider.
+#[doc(hidden)]
+pub fn __chapter_editions<T: SourceProvider>(bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut request: ChapterEditionsRequest = crate::controls::export::__decode_request(bytes)?;
+    crate::editions::validate_request(&request)
+        .map_err(|_| Error::Host("request.invalid".into()))?;
+    match &mut request.entry {
+        MediaEntry::Manga(manga) => {
+            manga.chapters = None;
+            manga.catalog = None;
+        }
+        MediaEntry::Novel(novel) => {
+            novel.chapters = None;
+            novel.catalog = None;
+        }
+        MediaEntry::Anime(_) => {}
+    }
+    let limit = request.limit;
+    let page = T::get_chapter_editions(request)?;
+    crate::editions::__encode_page("get_chapter_editions", &page, limit)
 }
 
 #[cfg(test)]
