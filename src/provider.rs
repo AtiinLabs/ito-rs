@@ -16,6 +16,8 @@
 //!   `get_option_page(request)`, and `get_search_suggestions(query, kind)`. Unsupported means absent.
 //! - `get_media_update(entry, needs_details, needs_units) -> MediaEntry`;
 //! - `get_chapter_pages(entry, chapter) -> Vec<Page>`;
+//! - optional `get_chapter_editions(request) -> ChapterEditionsPage`, one page of every alternative
+//!   upload of a manga or novel's chapters (see [`crate::editions`]). Unsupported means absent.
 //! - `get_episode_videos(anime, episode) -> Vec<Video>`;
 //! - `mark_completed(kind, media_key, unit_key) -> i32` (1 on success).
 
@@ -23,7 +25,8 @@ use crate::controls::{
     OptionPage, OptionRequest, SearchCapabilities, SearchSuggestion, SettingsForm,
 };
 use crate::models::{
-    Chapter, FilterItem, HomeLayout, Listing, MediaEntry, MediaKind, MediaPageResult, Page,
+    Chapter, ChapterEditionsPage, ChapterEditionsRequest, FilterItem, HomeLayout, Listing,
+    MediaEntry, MediaKind, MediaPageResult, Page,
     anime::{self, Anime, Episode, Video},
     manga::{self, Manga},
     novel::{self, Novel},
@@ -101,6 +104,22 @@ pub trait SourceProvider {
 
     /// The pages of a manga or novel chapter, read as the chapter's `kind` says.
     fn get_chapter_pages(_entry: MediaEntry, _chapter: Chapter) -> Result<Vec<Page>> {
+        Err(Error::Unsupported)
+    }
+
+    /// Lists alternative uploads of a manga or novel's chapters, one page per call, after an
+    /// explicit user action; see [`crate::editions`] for the rules the SDK enforces.
+    ///
+    /// `request.entry` has no chapter list or catalog. Return `limit` chapters at most; set
+    /// `next_cursor` and `Partial` while more remain, and bind the cursor to this title and the
+    /// settings, account and filters in effect, refusing a stale or foreign cursor without putting
+    /// the cursor or any token in the error message. Return [`Error::Unsupported`] to opt out; any
+    /// other error is a failure, never an empty page.
+    ///
+    /// # Errors
+    /// Whatever the source reports. The export adds [`Error::Contract`] for a page that breaks
+    /// the contract.
+    fn get_chapter_editions(_request: ChapterEditionsRequest) -> Result<ChapterEditionsPage> {
         Err(Error::Unsupported)
     }
 
@@ -190,6 +209,17 @@ pub trait MangaProvider {
     fn get_manga_update(manga: Manga, needs_details: bool, needs_chapters: bool) -> Result<Manga>;
 
     fn get_page_list(manga: Manga, chapter: Chapter) -> Result<Vec<Page>>;
+
+    /// Lists alternative uploads of the manga's chapters, one page per call. See
+    /// [`SourceProvider::get_chapter_editions`]. The manga arrives without chapters or catalog.
+    /// Unsupported opts out.
+    fn get_chapter_editions(
+        _manga: Manga,
+        _cursor: Option<String>,
+        _limit: u32,
+    ) -> Result<ChapterEditionsPage> {
+        Err(Error::Unsupported)
+    }
 
     /// Reports completion of a chapter. Delivery may be retried: implementations must be
     /// idempotent and must not lower remote progress. Unsupported opts out.
@@ -355,6 +385,17 @@ pub trait NovelProvider {
 
     fn get_chapter_content(novel: Novel, chapter: Chapter) -> Result<Vec<Page>>;
 
+    /// Lists alternative uploads of the novel's chapters, one page per call. See
+    /// [`SourceProvider::get_chapter_editions`]. The novel arrives without chapters or catalog.
+    /// Unsupported opts out.
+    fn get_chapter_editions(
+        _novel: Novel,
+        _cursor: Option<String>,
+        _limit: u32,
+    ) -> Result<ChapterEditionsPage> {
+        Err(Error::Unsupported)
+    }
+
     /// Reports completion of a chapter. See MangaProvider::mark_chapter_read.
     fn mark_chapter_read(_media_key: &str, _chapter_key: &str) -> Result<()> {
         Err(crate::Error::Unsupported)
@@ -464,6 +505,15 @@ impl<T: MangaProvider> SourceProvider for MangaSource<T> {
     fn get_chapter_pages(entry: MediaEntry, chapter: Chapter) -> Result<Vec<Page>> {
         match entry {
             MediaEntry::Manga(manga) => T::get_page_list(manga, chapter),
+            _ => Err(Error::Unsupported),
+        }
+    }
+
+    fn get_chapter_editions(request: ChapterEditionsRequest) -> Result<ChapterEditionsPage> {
+        match request.entry {
+            MediaEntry::Manga(manga) => {
+                T::get_chapter_editions(manga, request.cursor, request.limit)
+            }
             _ => Err(Error::Unsupported),
         }
     }
@@ -679,6 +729,15 @@ impl<T: NovelProvider> SourceProvider for NovelSource<T> {
         }
     }
 
+    fn get_chapter_editions(request: ChapterEditionsRequest) -> Result<ChapterEditionsPage> {
+        match request.entry {
+            MediaEntry::Novel(novel) => {
+                T::get_chapter_editions(novel, request.cursor, request.limit)
+            }
+            _ => Err(Error::Unsupported),
+        }
+    }
+
     fn mark_completed(kind: MediaKind, media_key: &str, unit_key: &str) -> Result<()> {
         match kind {
             MediaKind::Novel => T::mark_chapter_read(media_key, unit_key),
@@ -824,6 +883,16 @@ macro_rules! export_plugin {
             $crate::image::__pack_result(
                 "get_chapter_pages",
                 $crate::export::__chapter_pages::<$type>(entry, chapter),
+            )
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn get_chapter_editions(request_ptr: i32, request_len: i32) -> i64 {
+            // SAFETY: the host owns a readable argument buffer for this call.
+            let request = unsafe { $crate::export::__bytes(request_ptr, request_len) };
+            $crate::image::__pack_encoded(
+                "get_chapter_editions",
+                $crate::export::__chapter_editions::<$type>(request),
             )
         }
 

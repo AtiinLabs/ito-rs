@@ -39,7 +39,7 @@ pub const MAX_LANG_BYTES: usize = 35;
 pub const MAX_ABS_NUMBER: f64 = 1e9;
 /// Largest magnitude of `date_updated`, in seconds since 1970-01-01 UTC (about the year 5138).
 pub const MAX_ABS_DATE: f64 = 1e11;
-/// Encoded size of a `get_media_update` or `handle_url` response.
+/// Encoded size of a `get_media_update`, `handle_url` or `get_chapter_editions` response.
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
 macro_rules! rules {
