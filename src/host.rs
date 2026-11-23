@@ -2,6 +2,9 @@
 unsafe extern "C" {
     pub fn fetch(ptr: i32, len: i32) -> i32;
     pub fn fetch_v2(req_ptr: i32, req_len: i32, opt_ptr: i32, opt_len: i32) -> i32;
+    /// Imported only by plugins that call `Request::send_all`; wasm links an import only when
+    /// something references it.
+    pub fn fetch_batch(ptr: i32, len: i32) -> i32;
     pub fn fetch_read(ptr: i32);
 }
 
