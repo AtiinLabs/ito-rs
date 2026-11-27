@@ -50,6 +50,7 @@ fn every_export_keeps_its_name_and_signature() {
     let _: extern "C" fn() -> u32 = ito_error_version;
     let _: extern "C" fn() -> i64 = ito_last_error;
     let _: extern "C" fn() -> i64 = get_home;
+    let _: extern "C" fn(i32) -> i64 = get_home_v2;
     let _: extern "C" fn() -> i64 = get_settings;
     let _: extern "C" fn() -> i64 = get_settings_actions;
     let _: extern "C" fn(i32, i32) -> i64 = run_settings_action;

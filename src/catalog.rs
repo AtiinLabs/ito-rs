@@ -14,9 +14,16 @@
 //! lang, volume, chapter, date), duplicate keys, then scanlator identifiers that carry two
 //! names. Duplicate `reading_order` values are valid: equal values mean the same reading
 //! position.
+//!
+//! Order of checks for a home layout: components in order. A featured component checks its item
+//! count, then its `auto_advance`, then each item in order (its entry, banner and logo lengths,
+//! banner and logo schemes, tagline, summary, badge label, badge rank, chip count, each chip's text
+//! and then number, accent), then duplicate `(kind, key)` pairs. The first violation wins.
 
 use crate::models::{
-    Chapter, HomeComponentValue, HomeLayout, LinkValue, MediaEntry, MediaPageResult, manga::Manga,
+    Chapter, HomeComponentValue, HomeLayout, LinkValue, MediaEntry, MediaPageResult,
+    featured::{Featured, FeaturedChip, FeaturedItem},
+    manga::Manga,
     novel::Novel,
 };
 use std::{collections::HashMap, collections::HashSet, fmt};
@@ -41,6 +48,29 @@ pub const MAX_ABS_NUMBER: f64 = 1e9;
 pub const MAX_ABS_DATE: f64 = 1e11;
 /// Encoded size of a `get_media_update`, `handle_url` or `get_chapter_editions` response.
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Items in one featured home component.
+pub const MAX_FEATURED_ITEMS: usize = 20;
+/// Chips on one featured item.
+pub const MAX_FEATURED_CHIPS: usize = 6;
+pub const MAX_TAGLINE_BYTES: usize = 256;
+pub const MAX_SUMMARY_BYTES: usize = 2_048;
+pub const MAX_BADGE_LABEL_BYTES: usize = 64;
+pub const MAX_CHIP_TEXT_BYTES: usize = 64;
+/// Largest rank a badge shows; ranks start at 1.
+pub const MAX_BADGE_RANK: i32 = 999;
+/// Bounds of a featured component's `auto_advance`, in seconds.
+pub const MIN_AUTO_ADVANCE: f32 = 2.0;
+pub const MAX_AUTO_ADVANCE: f32 = 60.0;
+/// Largest accent colour, `0xRRGGBB`.
+pub const MAX_ACCENT: u32 = 0xFF_FFFF;
+/// Years a year chip may show.
+pub const MIN_CHIP_YEAR: f64 = 1_800.0;
+pub const MAX_CHIP_YEAR: f64 = 2_200.0;
+/// Largest value of a rating chip on its normalized scale; the smallest is 0.
+pub const MAX_CHIP_RATING: f64 = 10.0;
+/// Largest count a units chip may show.
+pub const MAX_CHIP_UNITS: f64 = 1_000_000.0;
 
 macro_rules! rules {
     ($($variant:ident => $code:literal),+ $(,)?) => {
@@ -73,6 +103,11 @@ rules! {
     DuplicateKey => "duplicate.key",
     ScanlatorConflict => "scanlator.conflict",
     ResponseTooLarge => "response.too_large",
+    CountFeatured => "count.featured",
+    CountChips => "count.chips",
+    LengthText => "length.text",
+    UrlScheme => "url.scheme",
+    ColorRange => "color.range",
 }
 
 /// A broken catalog rule. It names the rule only, never the offending value.
@@ -270,6 +305,7 @@ pub fn validate_home(home: &HomeLayout) -> Check {
             | HomeComponentValue::MediaBigScroller(entries, _) => {
                 entries.iter().try_for_each(validate_entry)?
             }
+            HomeComponentValue::Featured(featured) => validate_featured(featured)?,
             HomeComponentValue::AnimeScroller(..)
             | HomeComponentValue::AnimeList(..)
             | HomeComponentValue::AnimeEpisodeList(..)
@@ -279,4 +315,105 @@ pub fn validate_home(home: &HomeLayout) -> Check {
         }
     }
     Ok(())
+}
+
+/// Checks one featured component: its item count, `auto_advance`, each item in order, then
+/// duplicate `(kind, key)` pairs.
+fn validate_featured(featured: &Featured) -> Check {
+    if !(1..=MAX_FEATURED_ITEMS).contains(&featured.items.len()) {
+        return fail(Rule::CountFeatured);
+    }
+    if featured
+        .auto_advance
+        .is_some_and(|seconds| !(MIN_AUTO_ADVANCE..=MAX_AUTO_ADVANCE).contains(&seconds))
+    {
+        return fail(Rule::NumberRange);
+    }
+    featured.items.iter().try_for_each(validate_featured_item)?;
+    let mut keys = HashSet::new();
+    for item in &featured.items {
+        if !keys.insert((item.entry.kind(), item.entry.key())) {
+            return fail(Rule::DuplicateKey);
+        }
+    }
+    Ok(())
+}
+
+/// Checks one featured item. Both artwork lengths come before both schemes, as the shared order
+/// requires.
+fn validate_featured_item(item: &FeaturedItem) -> Check {
+    validate_entry(&item.entry)?;
+    let artwork = [item.banner.as_deref(), item.logo.as_deref()];
+    for url in artwork {
+        optional_within(url, 1, MAX_URL_BYTES, Rule::LengthUrl)?;
+    }
+    for url in artwork {
+        optional_web_url(url)?;
+    }
+    optional_within(
+        item.tagline.as_deref(),
+        1,
+        MAX_TAGLINE_BYTES,
+        Rule::LengthText,
+    )?;
+    optional_within(
+        item.summary.as_deref(),
+        1,
+        MAX_SUMMARY_BYTES,
+        Rule::LengthText,
+    )?;
+    if let Some(badge) = &item.badge {
+        optional_within(
+            badge.label.as_deref(),
+            1,
+            MAX_BADGE_LABEL_BYTES,
+            Rule::LengthText,
+        )?;
+        if badge
+            .rank
+            .is_some_and(|rank| !(1..=MAX_BADGE_RANK).contains(&rank))
+        {
+            return fail(Rule::NumberRange);
+        }
+    }
+    if item.chips.len() > MAX_FEATURED_CHIPS {
+        return fail(Rule::CountChips);
+    }
+    item.chips.iter().try_for_each(validate_featured_chip)?;
+    if item.accent.is_some_and(|accent| accent > MAX_ACCENT) {
+        return fail(Rule::ColorRange);
+    }
+    Ok(())
+}
+
+/// Checks a chip's text, then its number against the range of its kind.
+fn validate_featured_chip(chip: &FeaturedChip) -> Check {
+    optional_within(
+        chip.text.as_deref(),
+        1,
+        MAX_CHIP_TEXT_BYTES,
+        Rule::LengthText,
+    )?;
+    match chip.number {
+        Some(number) if !chip.kind.accepts_number(number) => fail(Rule::NumberRange),
+        _ => Ok(()),
+    }
+}
+
+fn optional_web_url(value: Option<&str>) -> Check {
+    match value {
+        Some(url) if !is_web_url(url) => fail(Rule::UrlScheme),
+        _ => Ok(()),
+    }
+}
+
+/// Whether `value` begins with an `http://` or `https://` scheme, compared without regard to ASCII
+/// case. Hosts fetch only these schemes directly.
+pub(crate) fn is_web_url(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    ["http://", "https://"].iter().any(|scheme| {
+        bytes
+            .get(..scheme.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme.as_bytes()))
+    })
 }
