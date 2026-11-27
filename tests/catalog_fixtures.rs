@@ -23,6 +23,18 @@ fn fixture() -> Value {
         .expect("valid shared fixture JSON")
 }
 
+/// The home rule codes, which `fixtures/home-v2.json` pins; the catalog fixture lists the rest.
+fn home_codes() -> Vec<String> {
+    let home: Value = serde_json::from_str(include_str!("../fixtures/home-v2.json"))
+        .expect("valid home fixture JSON");
+    home["codes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|code| code.as_str().unwrap().to_owned())
+        .collect()
+}
+
 fn wire_bytes(entry: &Value) -> Vec<u8> {
     let part =
         |key: &str| hex::decode(entry.get(key).and_then(Value::as_str).unwrap_or("")).unwrap();
@@ -608,7 +620,12 @@ fn the_fixture_lists_every_code_and_pins_each_one_but_the_response_bound() {
         .iter()
         .map(|c| c.as_str().unwrap())
         .collect();
-    let mut known: Vec<&str> = Rule::ALL.iter().map(|rule| rule.code()).collect();
+    let home = home_codes();
+    let mut known: Vec<&str> = Rule::ALL
+        .iter()
+        .map(|rule| rule.code())
+        .filter(|code| !home.iter().any(|home_code| home_code == code))
+        .collect();
     known.push("enum.unknown");
     listed.sort_unstable();
     known.sort_unstable();

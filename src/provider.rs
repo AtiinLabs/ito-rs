@@ -9,6 +9,8 @@
 //! diagnostics exports:
 //! - `ito_abi_version() -> u32` and `ito_supported_kinds() -> u32` (a `MediaKind::mask`);
 //! - `get_home`, `get_settings`, `handle_url(url)`, `handle_image(url)`;
+//! - `get_home_v2(features)`, the same home lowered to the features a host passes (see
+//!   [`crate::models::featured`]); every plugin built with this SDK exports it;
 //! - `get_listing(listing, page) -> MediaPageResult`;
 //! - `search(query, page, kind, filters) -> MediaPageResult`, `kind` a `MediaKind` value or -1
 //!   for every kind the source serves;
@@ -24,6 +26,7 @@
 use crate::controls::{
     OptionPage, OptionRequest, SearchCapabilities, SearchSuggestion, SettingsForm,
 };
+use crate::models::featured::HomeFeatures;
 use crate::models::{
     Chapter, ChapterEditionsPage, ChapterEditionsRequest, FilterItem, HomeLayout, Listing,
     MediaEntry, MediaKind, MediaPageResult, Page,
@@ -43,6 +46,12 @@ pub trait SourceProvider {
         Ok(HomeLayout {
             components: Vec::new(),
         })
+    }
+
+    /// The home a host with `features` can show. Defaults to `get_home`; override it to skip work
+    /// for features the host lacks.
+    fn get_home_with(_features: HomeFeatures) -> Result<HomeLayout> {
+        Self::get_home()
     }
 
     fn get_settings() -> Option<crate::models::SettingsSchema> {
@@ -159,6 +168,12 @@ pub trait MangaProvider {
         })
     }
 
+    /// The home a host with `features` can show. Defaults to `get_home`; override it to skip work
+    /// for features the host lacks.
+    fn get_home_with(_features: HomeFeatures) -> Result<HomeLayout> {
+        Self::get_home()
+    }
+
     fn get_settings() -> Option<crate::models::SettingsSchema> {
         None
     }
@@ -260,6 +275,12 @@ pub trait AnimeProvider {
         })
     }
 
+    /// The home a host with `features` can show. Defaults to `get_home`; override it to skip work
+    /// for features the host lacks.
+    fn get_home_with(_features: HomeFeatures) -> Result<HomeLayout> {
+        Self::get_home()
+    }
+
     fn get_settings() -> Option<crate::models::SettingsSchema> {
         None
     }
@@ -335,6 +356,12 @@ pub trait NovelProvider {
         Ok(HomeLayout {
             components: Vec::new(),
         })
+    }
+
+    /// The home a host with `features` can show. Defaults to `get_home`; override it to skip work
+    /// for features the host lacks.
+    fn get_home_with(_features: HomeFeatures) -> Result<HomeLayout> {
+        Self::get_home()
     }
 
     fn get_settings() -> Option<crate::models::SettingsSchema> {
@@ -432,6 +459,10 @@ impl<T: MangaProvider> SourceProvider for MangaSource<T> {
 
     fn get_home() -> Result<HomeLayout> {
         T::get_home()
+    }
+
+    fn get_home_with(features: HomeFeatures) -> Result<HomeLayout> {
+        T::get_home_with(features)
     }
 
     fn get_settings() -> Option<crate::models::SettingsSchema> {
@@ -552,6 +583,10 @@ impl<T: AnimeProvider> SourceProvider for AnimeSource<T> {
         T::get_home()
     }
 
+    fn get_home_with(features: HomeFeatures) -> Result<HomeLayout> {
+        T::get_home_with(features)
+    }
+
     fn get_settings() -> Option<crate::models::SettingsSchema> {
         T::get_settings()
     }
@@ -652,6 +687,10 @@ impl<T: NovelProvider> SourceProvider for NovelSource<T> {
 
     fn get_home() -> Result<HomeLayout> {
         T::get_home()
+    }
+
+    fn get_home_with(features: HomeFeatures) -> Result<HomeLayout> {
+        T::get_home_with(features)
     }
 
     fn get_settings() -> Option<crate::models::SettingsSchema> {
@@ -802,6 +841,18 @@ macro_rules! export_plugin {
             $crate::export::__pack_home(
                 "get_home",
                 <$type as $crate::provider::SourceProvider>::get_home(),
+                $crate::models::featured::HomeFeatures::NONE,
+            )
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "C" fn get_home_v2(features: i32) -> i64 {
+            let features =
+                $crate::models::featured::HomeFeatures::from_bits_retain(features as u32);
+            $crate::export::__pack_home(
+                "get_home_v2",
+                <$type as $crate::provider::SourceProvider>::get_home_with(features),
+                features,
             )
         }
 

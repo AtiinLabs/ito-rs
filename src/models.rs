@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 pub mod anime;
+pub mod featured;
 pub mod manga;
 pub mod novel;
 
@@ -374,6 +375,9 @@ pub enum HomeComponentValue {
     MediaScroller(Vec<MediaEntry>, Option<Listing>),
     MediaList(bool, Option<i32>, Vec<MediaEntry>, Option<Listing>),
     MediaBigScroller(Vec<MediaEntry>, Option<f32>),
+    /// A hero carousel with artwork, badges and chips. Hosts without
+    /// `HomeFeatures::FEATURED` receive it lowered to the matching BigScroller.
+    Featured(featured::Featured),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -568,6 +572,12 @@ mod tests {
         assert_eq!(
             index(HomeComponentValue::MediaBigScroller(Vec::new(), None)),
             16
+        );
+        assert_eq!(
+            index(HomeComponentValue::Featured(featured::Featured::new(
+                Vec::new()
+            ))),
+            17
         );
     }
 

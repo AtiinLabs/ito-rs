@@ -3,8 +3,8 @@
 //! `dealloc`. The macro only turns pointers into slices; the rest lives here.
 
 use crate::models::{
-    anime::Video, Chapter, ChapterEditionsRequest, HomeLayout, LinkValue, MediaEntry, MediaKind,
-    MediaPageResult, Page,
+    Chapter, ChapterEditionsRequest, HomeLayout, LinkValue, MediaEntry, MediaKind, MediaPageResult,
+    Page, anime::Video, featured::HomeFeatures,
 };
 use crate::provider::SourceProvider;
 use crate::{Error, Result};
@@ -79,9 +79,11 @@ pub fn __encode_checked<T: serde::Serialize>(
     Ok(bytes)
 }
 
-/// Packs a `get_home` response.
+/// Packs a `get_home` or `get_home_v2` response. The layout is lowered to what `host` can show
+/// before the contract check, so the bytes sent are exactly the bytes validated.
 #[doc(hidden)]
-pub fn __pack_home(export: &str, result: Result<HomeLayout>) -> i64 {
+pub fn __pack_home(export: &str, result: Result<HomeLayout>, host: HomeFeatures) -> i64 {
+    let result = result.map(|home| home.downgraded(host));
     crate::image::__pack_encoded(
         export,
         __encode_checked(export, result, crate::catalog::validate_home, None),
@@ -460,5 +462,101 @@ mod tests {
             unreachable!()
         };
         assert!(received.catalog.is_none());
+    }
+}
+
+#[cfg(test)]
+mod home_tests {
+    use super::__pack_home;
+    use crate::catalog;
+    use crate::error::{ErrorCategory, ErrorReport, take_last_report};
+    use crate::models::{HomeLayout, featured::HomeFeatures};
+    use serde_json::Value;
+
+    fn fixture() -> Value {
+        serde_json::from_str(include_str!("../fixtures/home-v2.json"))
+            .expect("valid home fixture JSON")
+    }
+
+    fn hex_of(value: &Value) -> Vec<u8> {
+        hex::decode(value.as_str().expect("hex string")).expect("valid hex")
+    }
+
+    /// Packs `layout` for `host` and checks it against the fixture verdict. A success must pack
+    /// the exact bytes the fixture pins for the lowered layout; a violation must pack nothing and
+    /// report the fixture's rule code. A packed pointer keeps only its low 32 bits off wasm, so a
+    /// successful block cannot be freed here; the test checks its length instead.
+    fn check_pack(
+        layout: HomeLayout,
+        host: HomeFeatures,
+        verdict: &str,
+        output: &[u8],
+        name: &str,
+    ) {
+        let packed = __pack_home("get_home_v2", Ok(layout.clone()), host);
+        match verdict.strip_prefix("violation:") {
+            None => {
+                assert_ne!(packed, 0, "{name} packs");
+                assert_eq!(
+                    packed as u64 & 0xFFFF_FFFF,
+                    output.len() as u64,
+                    "{name} length"
+                );
+                let bytes = super::__encode_checked(
+                    "get_home_v2",
+                    Ok(layout.downgraded(host)),
+                    catalog::validate_home,
+                    None,
+                )
+                .expect(name);
+                assert_eq!(bytes, output, "{name} bytes");
+            }
+            Some(code) => {
+                assert_eq!(packed, 0, "{name} packs nothing");
+                let report = take_last_report().expect("the violation is reported");
+                let report: ErrorReport = postcard::from_bytes(&report).expect("report decodes");
+                assert_eq!(report.category, ErrorCategory::ContractViolation, "{name}");
+                assert_eq!(report.message, code, "{name}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_wire_layout_packs_its_bytes_or_reports_its_first_violation() {
+        let fixture = fixture();
+        for case in fixture["wire"].as_array().unwrap() {
+            if case["type"] != "HomeLayout" {
+                continue;
+            }
+            let name = case["name"].as_str().unwrap();
+            let wire = hex_of(&case["hex"]);
+            let layout: HomeLayout =
+                postcard::from_bytes(&wire).unwrap_or_else(|error| panic!("{name}: {error}"));
+            check_pack(
+                layout,
+                HomeFeatures::FEATURED,
+                case["expect"].as_str().unwrap(),
+                &wire,
+                name,
+            );
+        }
+    }
+
+    #[test]
+    fn every_downgrade_case_packs_the_layout_it_lowers_to() {
+        let fixture = fixture();
+        for case in fixture["downgrade"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let input: HomeLayout =
+                postcard::from_bytes(&hex_of(&case["input"])).expect("input decodes");
+            let host = HomeFeatures::from_bits_retain(case["features"].as_u64().unwrap() as u32);
+            check_pack(
+                input,
+                host,
+                case["expect"].as_str().unwrap(),
+                &hex_of(&case["output"]),
+                name,
+            );
+        }
     }
 }
